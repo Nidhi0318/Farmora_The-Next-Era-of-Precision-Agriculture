@@ -1,0 +1,106 @@
+{
+    "surveys": {
+        "123/A": {
+            "state": "Karnataka",
+            "district": "Shimoga",
+            "taluk": "Sagara",
+            "village": "Keladi",
+            "hobli": "Sagara Hobli"
+        },
+        "456/B": {
+            "state": "Karnataka",
+            "district": "Udupi",
+            "taluk": "Kundapura",
+            "village": "Koteshwara",
+            "hobli": "Kundapura Hobli"
+        },
+        "154/4": {
+            "state": "Karnataka",
+            "district": "Uttara Knnada",
+            "taluk": "Honnavar",
+            "village": "Hadinbal",
+            "hobli": "Mavinkurva"
+        },
+        "88/C": {
+            "state": "Karnataka",
+            "district": "Hassan",
+            "taluk": "Sakleshpura",
+            "village": "Hanubalu",
+            "hobli": "Hanubalu Hobli"
+        }
+    },
+    "taluks": {
+        "Sagara": {
+            "ph": 5.5,
+            "temp": 28,
+            "rainfall": 2500
+        },
+        "Kundapura": {
+            "ph": 6.8,
+            "temp": 32,
+            "rainfall": 3500
+        },
+        "Nanjangud": {
+            "ph": 7.2,
+            "temp": 30,
+            "rainfall": 800
+        },
+        "Sakleshpura": {
+            "ph": 5.8,
+            "temp": 22,
+            "rainfall": 2800
+        }
+    },
+    "market_prices": [
+        {
+            "crop": "Rice",
+            "price": "₹2200/quintal",
+            "trend": "up"
+        },
+        {
+            "crop": "Wheat",
+            "price": "₹2500/quintal",
+            "trend": "down"
+        },
+        {
+            "crop": "Sugarcane",
+            "price": "₹3100/quintal",
+            "trend": "up"
+        },
+        {
+            "crop": "Cotton",
+            "price": "₹6000/quintal",
+            "trend": "stable"
+        },
+        {
+            "crop": "Banana",
+            "price": "₹40/kg",
+            "trend": "up"
+        },
+        {
+            "crop": "Arecanut",
+            "price": "₹45000/quintal",
+            "trend": "up"
+        },
+        {
+            "crop": "Pepper",
+            "price": "₹600/kg",
+            "trend": "stable"
+        },
+        {
+            "crop": "Cashew",
+            "price": "₹120/kg",
+            "trend": "down"
+        },
+        {
+            "crop": "Rubber",
+            "price": "₹180/kg",
+            "trend": "stable"
+        },
+        {
+            "crop": "Coconut",
+            "price": "₹35/piece",
+            "trend": "up"
+        }
+    ]
+}
