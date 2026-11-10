@@ -20,13 +20,14 @@ CROP_HISTORY_SESSIONS: dict[str, int] = {}
 
 # MySQL Workbench configuration
 MYSQL_CONFIG = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "MySQL@2026",
-    "database": "farmer_portal",
+    "host": os.environ.get("MYSQL_HOST", "localhost"),
+    "port": int(os.environ.get("MYSQL_PORT", 3306)),
+    "user": os.environ.get("MYSQL_USER", "root"),
+    "password": os.environ.get("MYSQL_PASSWORD", "MySQL@2026"),
+    "database": os.environ.get("MYSQL_DATABASE", "farmer_portal"),
     "charset": "utf8mb4",
-    "autocommit": True
+    "autocommit": True,
+    "connect_timeout": 1
 }
 
 def get_db_connection():
@@ -34,6 +35,12 @@ def get_db_connection():
     Returns an active database connection to MySQL Workbench.
     Falls back to SQLite if MySQL service is unreachable.
     """
+    # Cloud environments (Render, Railway, etc.) or when no external MySQL host is provided
+    is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("VERCEL"))
+    if is_cloud and not os.environ.get("MYSQL_HOST"):
+        conn = sqlite3.connect("farmer_portal.db")
+        return conn, "sqlite"
+
     try:
         conn = pymysql.connect(**MYSQL_CONFIG)
         return conn, "mysql"
@@ -43,99 +50,102 @@ def get_db_connection():
         return conn, "sqlite"
 
 def init_db():
-    # 1. Initialize MySQL Workbench database and tables
-    try:
-        server_conn = pymysql.connect(
-            host="localhost",
-            port=3306,
-            user="root",
-            password="MySQL@2026",
-            charset="utf8mb4",
-            autocommit=True
-        )
-        s_cur = server_conn.cursor()
-        s_cur.execute("CREATE DATABASE IF NOT EXISTS farmer_portal")
-        server_conn.close()
-
-        my_conn = pymysql.connect(**MYSQL_CONFIG)
-        cursor = my_conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS farmers (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255),
-                aadhaar_number VARCHAR(50),
-                survey_number VARCHAR(100),
-                phone_number VARCHAR(50),
-                state VARCHAR(100),
-                district VARCHAR(100),
-                taluk VARCHAR(100),
-                hobli VARCHAR(100),
-                password VARCHAR(255),
-                land_area_acres DOUBLE DEFAULT 0.0,
-                land_area_guntas DOUBLE DEFAULT 0.0,
-                primary_crop VARCHAR(100) DEFAULT 'Rice',
-                soil_type VARCHAR(100) DEFAULT 'Laterite Soil',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    # 1. Initialize MySQL Workbench database and tables (if not on cloud without MySQL)
+    is_cloud = bool(os.environ.get("RENDER") or os.environ.get("PORT") or os.environ.get("VERCEL"))
+    if not (is_cloud and not os.environ.get("MYSQL_HOST")):
+        try:
+            server_conn = pymysql.connect(
+                host=MYSQL_CONFIG["host"],
+                port=MYSQL_CONFIG["port"],
+                user=MYSQL_CONFIG["user"],
+                password=MYSQL_CONFIG["password"],
+                charset="utf8mb4",
+                autocommit=True,
+                connect_timeout=1
             )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS farmer_crop_history (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                farmer_id INT NOT NULL,
-                year INT NOT NULL,
-                crop_name VARCHAR(100) NOT NULL,
-                season VARCHAR(50) NOT NULL,
-                cultivated_area_acres DOUBLE NOT NULL,
-                yield_quantity DOUBLE NOT NULL,
-                yield_unit VARCHAR(30) NOT NULL DEFAULT 'kg',
-                soil_type VARCHAR(100) NOT NULL,
-                soil_ph DOUBLE NOT NULL,
-                irrigation_type VARCHAR(100) NOT NULL,
-                profit DOUBLE NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_farmer_crop_history_farmer_year (farmer_id, year),
-                CONSTRAINT fk_crop_history_farmer FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
-            )
-        ''')
+            s_cur = server_conn.cursor()
+            s_cur.execute(f"CREATE DATABASE IF NOT EXISTS {MYSQL_CONFIG['database']}")
+            server_conn.close()
 
-        # Ensure extra columns exist if table was previously created
-        my_cols_to_add = [
-            ('primary_crop', "VARCHAR(100) DEFAULT 'Rice'"),
-            ('soil_type', "VARCHAR(100) DEFAULT 'Laterite Soil'"),
-            ('created_at', "DATETIME DEFAULT CURRENT_TIMESTAMP"),
-            ('updated_at', "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-        ]
-        for col_name, col_type in my_cols_to_add:
-            try:
-                cursor.execute(f'ALTER TABLE farmers ADD COLUMN {col_name} {col_type}')
-            except Exception:
-                pass
+            my_conn = pymysql.connect(**MYSQL_CONFIG)
+            cursor = my_conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS farmers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255),
+                    aadhaar_number VARCHAR(50),
+                    survey_number VARCHAR(100),
+                    phone_number VARCHAR(50),
+                    state VARCHAR(100),
+                    district VARCHAR(100),
+                    taluk VARCHAR(100),
+                    hobli VARCHAR(100),
+                    password VARCHAR(255),
+                    land_area_acres DOUBLE DEFAULT 0.0,
+                    land_area_guntas DOUBLE DEFAULT 0.0,
+                    primary_crop VARCHAR(100) DEFAULT 'Rice',
+                    soil_type VARCHAR(100) DEFAULT 'Laterite Soil',
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS farmer_crop_history (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    farmer_id INT NOT NULL,
+                    year INT NOT NULL,
+                    crop_name VARCHAR(100) NOT NULL,
+                    season VARCHAR(50) NOT NULL,
+                    cultivated_area_acres DOUBLE NOT NULL,
+                    yield_quantity DOUBLE NOT NULL,
+                    yield_unit VARCHAR(30) NOT NULL DEFAULT 'kg',
+                    soil_type VARCHAR(100) NOT NULL,
+                    soil_ph DOUBLE NOT NULL,
+                    irrigation_type VARCHAR(100) NOT NULL,
+                    profit DOUBLE NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    INDEX idx_farmer_crop_history_farmer_year (farmer_id, year),
+                    CONSTRAINT fk_crop_history_farmer FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
+                )
+            ''')
 
-        # Auto-migrate records from existing SQLite db to MySQL if available
-        if os.path.exists("farmer_portal.db"):
-            try:
-                s_conn = sqlite3.connect("farmer_portal.db")
-                s_cur = s_conn.cursor()
-                s_cur.execute("SELECT name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas FROM farmers")
-                rows = s_cur.fetchall()
-                for row in rows:
-                    if row[0]:
-                        cursor.execute("SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER(%s)", (row[0].strip(),))
-                        if not cursor.fetchone():
-                            cursor.execute('''
-                                INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas)
-                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ''', row)
-                s_conn.close()
-            except Exception as mig_err:
-                print(f"Notice: SQLite migration to MySQL: {mig_err}")
+            # Ensure extra columns exist if table was previously created
+            my_cols_to_add = [
+                ('primary_crop', "VARCHAR(100) DEFAULT 'Rice'"),
+                ('soil_type', "VARCHAR(100) DEFAULT 'Laterite Soil'"),
+                ('created_at', "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+                ('updated_at', "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+            ]
+            for col_name, col_type in my_cols_to_add:
+                try:
+                    cursor.execute(f'ALTER TABLE farmers ADD COLUMN {col_name} {col_type}')
+                except Exception:
+                    pass
 
-        my_conn.close()
-        print("Connected to MySQL Workbench (farmer_portal) successfully!")
-    except Exception as e:
-        print(f"Warning: Could not connect to MySQL Workbench: {e}. Setting up SQLite fallback.")
+            # Auto-migrate records from existing SQLite db to MySQL if available
+            if os.path.exists("farmer_portal.db"):
+                try:
+                    s_conn = sqlite3.connect("farmer_portal.db")
+                    s_cur = s_conn.cursor()
+                    s_cur.execute("SELECT name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas FROM farmers")
+                    rows = s_cur.fetchall()
+                    for row in rows:
+                        if row[0]:
+                            cursor.execute("SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER(%s)", (row[0].strip(),))
+                            if not cursor.fetchone():
+                                cursor.execute('''
+                                    INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas)
+                                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                ''', row)
+                    s_conn.close()
+                except Exception as mig_err:
+                    print(f"Notice: SQLite migration to MySQL: {mig_err}")
+
+            my_conn.close()
+            print("Connected to MySQL Workbench (farmer_portal) successfully!")
+        except Exception as e:
+            print(f"Warning: Could not connect to MySQL Workbench: {e}. Setting up SQLite fallback.")
 
     # 2. Also ensure SQLite fallback table exists
     try:
@@ -2815,7 +2825,7 @@ async def login_farmer(login: LoginRequest):
         raise he
     except Exception as e:
         print(f"Login error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error during login")
+        raise HTTPException(status_code=500, detail=f"Login error: {str(e)}")
 
 def _crop_history_farmer_id(authorization: Optional[str]) -> int:
     if not authorization or not authorization.startswith("Bearer "):
