@@ -1,0 +1,34 @@
+﻿// Add these new translations to the uiTranslations object
+
+    // Map & Land Parcel Details
+    noFarmPresent: { en: '🚫 No Farm Present', kn: '🚫 ಯಾವುದೇ ಹೊಲವಿಲ್ಲ' },
+    vacantLand: { en: 'Vacant Land / No Cultivation', kn: 'ಖಾಲಿ ಜಮೀನು / ಕೃಷಿ ಇಲ್ಲ' },
+    activeFarm: { en: '✅ Active Farm', kn: '✅ ಸಕ್ರಿಯ ಹೊಲ' },
+    cropDetails: { en: 'Crop Details', kn: 'ಬೆಳೆ ವಿವರಗಳು' },
+    currentCrop: { en: 'Current Crop', kn: 'ಪ್ರಸ್ತುತ ಬೆಳೆ' },
+    landOwner: { en: 'Land Owner', kn: 'ಭೂಮಾಲೀಕರು' },
+    landExtent: { en: 'Land Extent', kn: 'ಜಮೀನಿನ ವಿಸ್ತೀರ್ಣ' },
+    soilCondition: { en: 'Soil Condition', kn: 'ಮಣ್ಣಿನ ಸ್ಥಿತಿ' },
+    landType: { en: 'Land Type', kn: 'ಜಮೀನಿನ ಪ್ರಕಾರ' },
+    irrigated: { en: 'Irrigated', kn: 'ನೀರಾವರಿ' },
+    dryLand: { en: 'Dry Land', kn: 'ಒಣ ಭೂಮಿ' },
+    gardenLand: { en: 'Garden Land', kn: 'ತೋಟದ ಜಮೀನು' },
+    wetLand: { en: 'Wet Land', kn: 'ಜಲಾನಯನ ಭೂಮಿ' },
+    viewDetails: { en: 'View Details', kn: 'ವಿವರಗಳನ್ನು ನೋಡಿ' },
+    closeDetails: { en: 'Close', kn: 'ಮುಚ್ಚಿ' },
+    yourLand: { en: 'Your Land', kn: 'ನಿಮ್ಮ ಜಮೀನು' },
+    neighbourLand: { en: 'Neighbour Land', kn: 'ನೆರೆಹೊರೆಯ ಜಮೀನು' },
+    
+    // Additional Map Labels
+    mapLegend: { en: 'Map Legend', kn: 'ನಕ್ಷೆ ಸಂಕೇತಗಳು' },
+    yourFarm: { en: 'Your Farm (Green)', kn: 'ನಿಮ್ಮ ಹೊಲ (ಹಸಿರು)' },
+    neighbourFarms: { en: 'Neighbour Farms (Blue)', kn: 'ನೆರೆಹೊರೆಯ ಹೊಲಗಳು (ನೀಲಿ)' },
+    vacantPlots: { en: 'Vacant Plots (Gray)', kn: 'ಖಾಲಿ ಜಮೀನುಗಳು (ಬೂದು)' },
+    loadingMap: { en: 'Loading cadastral map...', kn: 'ನಕ್ಷೆ ಲೋಡ್ ಆಗುತ್ತಿದೆ...' },
+    mapError: { en: 'Unable to load map data', kn: 'ನಕ್ಷೆ ಮಾಹಿತಿ ಲೋಡ್ ಆಗಲಿಲ್ಲ' },
+    
+    // Crop Status
+    growing: { en: 'Growing', kn: 'ಬೆಳೆಯುತ್ತಿದೆ' },
+    harvested: { en: 'Harvested', kn: 'ಕೊಯ್ಲು ಮಾಡಲಾಗಿದೆ' },
+    fallow: { en: 'Fallow / Resting', kn: 'ಪಾಳು ಭೂಮಿ / ವಿಶ್ರಾಂತಿ' },
+    preparing: { en: 'Preparing Land', kn: 'ಜಮೀನು ತಯಾರಿಸಲಾಗುತ್ತಿದೆ' }

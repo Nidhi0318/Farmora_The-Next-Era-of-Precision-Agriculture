@@ -1,0 +1,56 @@
+L77: land_acres: number;
+L78: land_guntas: number;
+L102: const [stateLoc, setStateLoc] = useState('Karnataka');
+L130: land_area_acres?: number,
+L131: land_area_guntas?: number,
+L296: land_acres: number;
+L297: land_guntas: number;
+L314: total_land_acres: number;
+L349: land_acres: number;
+L350: land_guntas: number;
+L499: user_acres: (registeredUser?.land_area_acres ?? 2).toString(),
+L500: user_guntas: (registeredUser?.land_area_guntas ?? 0).toString(),
+L552: land_area_acres: parseFloat(landAcres) || 0,
+L553: land_area_guntas: parseFloat(landGuntas) || 0
+L685: const acresVal = calcAcres || (registeredUser?.land_area_acres ?? 0).toString();
+L686: const guntasVal = calcGuntas || (registeredUser?.land_area_guntas ?? 0).toString();
+L691: acres: acresVal,
+L692: guntas: guntasVal,
+L911: <h2>{t('welcomeUser', lang)} {registeredUser?.name || 'Farmer'}</h2>
+L984: <h2>{registeredUser?.name || farmerHistory?.info?.name || 'Farmer'} — {t('farmerProfileTitle', lang)}</h2>
+L986: 🏛️ {registeredUser?.hobli || farmerHistory?.info?.hobli || 'Kasaba'}, {registeredUser?.taluk || 'Taluk'}, {registeredUser?.district || 'District'}, {registeredUser?.state || 'Karnataka'}
+L992: <span className="profile-reg-id">ID: {farmerHistory?.info?.id || 'FP-1001'}</span>
+L1007: <span className="profile-v font-bold">{registeredUser?.name || farmerHistory?.info?.name || 'Farmer'}</span>
+L1011: <span className="profile-v">{registeredUser?.phone_number || farmerHistory?.info?.phone || 'Not Provided'}</span>
+L1019: <span className="profile-v">{registeredUser?.state || 'Karnataka'}</span>
+L1031: <span className="profile-v">{registeredUser?.hobli || farmerHistory?.info?.hobli || 'Kasaba'}</span>
+L1036: {registeredUser?.land_area_acres ?? farmerHistory?.info?.acres ?? 0} {t('acres', lang)}, {registeredUser?.land_area_guntas ?? farmerHistory?.info?.guntas ?? 0} {t('guntas', lang)}
+L1068: <span className="spec-txt">{soilData?.soil_type || farmerHistory?.info?.soil_type || 'Laterite Soil'}</span>
+L1084: ? `${farmerHistory.history[farmerHistory.history.length - 1].yield} ${farmerHistory.history[farmerHistory.history.length - 1].unit || 'kg'}`
+L1085: : '24.5 Quintals'}
+L1142: <span className="finance-footnote">Margin: ~{margin}% ROI</span>
+L1162: background: 'linear-gradient(135deg, rgba(167, 139, 250, 0.08), rgba(6, 182, 212, 0.06))',
+L1178: background: 'rgba(52, 211, 153, 0.08)',
+L1203: background: 'rgba(248, 113, 113, 0.06)',
+L1222: {weatherData && (weatherData.source.includes('Open-Meteo') || weatherData.source === 'OpenWeatherMap API') && <span className="live-badge">● {lang === 'kn' ? 'ನೇರ ಹವಾಮಾನ (Open-Meteo)' : 'LIVE (Open-Meteo)'}</span>}
+L1283: <span className="parameter-source">RTC Record</span>
+L1293: <span className="parameter-source">RTC Record</span>
+L1304: <span className="parameter-source">Open-Meteo 0-7cm</span>
+L1314: <span className="parameter-source">Open-Meteo Volumetric</span>
+L1328: <span className="soil-value">{getSoilName(soilData?.soil_type || 'Laterite', lang)}</span>
+L1381: <div className="card-best-variety-badge" onClick={() => openVarietyModal(cropName)} title="Click to view cultivar details">
+L1600: {getDistrictsForState(registeredUser?.state || 'Karnataka').map(d => (
+L1621: <span className="data-source-badge">Source: data.gov.in</span>
+L1727: <span><strong>Botanical Genus:</strong> <em>{speciesDataMap[selectedMarketResult.crop]?.botanical_genus}</em> • </span>
+L1851: <label>{t('acres', lang)}</label>
+L1852: <input type="number" value={calcAcres} onChange={(e) => setCalcAcres(e.target.value)} placeholder={String(registeredUser?.land_area_acres ?? 0)} className="form-input" />
+L1855: <label>{t('guntas', lang)}</label>
+L1856: <input type="number" value={calcGuntas} onChange={(e) => setCalcGuntas(e.target.value)} placeholder={String(registeredUser?.land_area_guntas ?? 0)} className="form-input" />
+L2041: <span className="ub-area">{u.land_acres} {t('acres', lang)} {u.land_guntas} {t('guntas', lang)}</span>
+L2092: <span className="spec-val">{p.land_acres} {t('acres', lang)} {p.land_guntas} {t('guntas', lang)}</span>
+L2168: <p>Please enter your survey number above to discover adjacent farmers.</p>
+L2187: <span className="stat-value">{registeredUser?.land_area_acres ?? farmerHistory.info.acres} {t('acres', lang)}</span>
+L2188: {(registeredUser?.land_area_guntas ?? farmerHistory.info.guntas) !== undefined && (
+L2189: <span className="stat-sub">{registeredUser?.land_area_guntas ?? farmerHistory.info.guntas} {t('guntas', lang)}</span>
+L2237: <h4>{t('annualProfitTrend', lang)} (INR)</h4>
+L2434: <p>No varieties match the selected filters. Select "All Seasons" or clear your search.</p>

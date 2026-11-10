@@ -16,6 +16,7 @@ import pytest
 import sqlite3
 import os
 import json
+import main
 from fastapi.testclient import TestClient
 
 # Import the app and helper functions from main
@@ -502,6 +503,31 @@ class TestProfitEstimateEndpoint:
 
 
 class TestFarmerLookupEndpoint:
+    def test_previous_crops_exclude_latest_year_crops(self, monkeypatch, tmp_path):
+        csv_path = tmp_path / "farmer_history.csv"
+        csv_path.write_text(
+            "Farmer_ID,Farmer_Name,Phone,Survey_Number,Hobli,Taluk,District,Total_Land_Acres,Total_Land_Guntas,"
+            "Soil_Type,pH,Primary_Crop,Secondary_Crop,Year,Yield_Quantity,Yield_Unit,Market_Price_Per_Unit,"
+            "Revenue_INR,Input_Cost_INR,Profit_INR,Profit_Per_Acre_INR\n"
+            "FP-1,Test Farmer,555,1/A,Hobli,Taluk,District,2,0,Laterite Soil,6.2,Rice,Banana,2022,10,kg,10,100,40,60,30\n"
+            "FP-1,Test Farmer,555,1/A,Hobli,Taluk,District,2,0,Laterite Soil,6.2,Pepper,Coconut,2023,10,kg,10,100,40,60,30\n"
+            "FP-1,Test Farmer,555,1/A,Hobli,Taluk,District,2,0,Laterite Soil,6.2,Arecanut,Pepper,2024,10,kg,10,100,40,60,30\n",
+            encoding="utf-8",
+        )
+
+        def unavailable_db():
+            raise RuntimeError("Database unavailable for this test")
+
+        monkeypatch.setattr(main, "FARMER_DETAILS_FILE", str(csv_path))
+        monkeypatch.setattr(main, "get_db_connection", unavailable_db)
+
+        response = client.get("/farmer-lookup?name=Test%20Farmer&phone=555")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["info"]["primary_crop"] == "Arecanut"
+        assert data["info"]["previous_crops"] == ["Rice", "Banana", "Coconut"]
+
     def test_known_farmer(self):
         """Use a farmer from the CSV dataset."""
         response = client.get("/farmer-lookup?name=Pushpa Gowda&phone=9126855092")
@@ -523,6 +549,134 @@ class TestFarmerLookupEndpoint:
         if data["found"]:
             years = [h["year"] for h in data["history"]]
             assert years == sorted(years), "History should be sorted by year"
+
+
+class TestFarmerCropHistory:
+    def test_crop_history_crud_is_scoped_to_logged_in_farmer(self, monkeypatch, tmp_path):
+        database_path = tmp_path / "crop_history.sqlite"
+        setup = sqlite3.connect(database_path)
+        setup.execute("""
+            CREATE TABLE farmers (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                taluk TEXT,
+                district TEXT,
+                state TEXT,
+                hobli TEXT,
+                aadhaar_number TEXT,
+                survey_number TEXT,
+                phone_number TEXT,
+                land_area_acres REAL,
+                land_area_guntas REAL,
+                primary_crop TEXT,
+                soil_type TEXT,
+                password TEXT
+            )
+        """)
+        setup.execute(
+            "INSERT INTO farmers VALUES (1, 'Farmer One', 'Taluk', 'District', 'State', 'Hobli', '', '1/A', '111', 2, 0, 'Rice', 'Laterite Soil', 'pass1')"
+        )
+        setup.execute(
+            "INSERT INTO farmers VALUES (2, 'Farmer Two', 'Taluk', 'District', 'State', 'Hobli', '', '2/A', '222', 3, 0, 'Rice', 'Laterite Soil', 'pass2')"
+        )
+        setup.execute("""
+            CREATE TABLE farmer_crop_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farmer_id INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                crop_name TEXT NOT NULL,
+                season TEXT NOT NULL,
+                cultivated_area_acres REAL NOT NULL,
+                yield_quantity REAL NOT NULL,
+                yield_unit TEXT NOT NULL,
+                soil_type TEXT NOT NULL,
+                soil_ph REAL NOT NULL,
+                irrigation_type TEXT NOT NULL,
+                profit REAL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        setup.commit()
+        setup.close()
+
+        monkeypatch.setattr(
+            main,
+            "get_db_connection",
+            lambda: (sqlite3.connect(database_path), "sqlite"),
+        )
+        farmer_one_login = client.post("/login", json={"name": "Farmer One", "password": "pass1"})
+        farmer_two_login = client.post("/login", json={"name": "Farmer Two", "password": "pass2"})
+        assert farmer_one_login.status_code == 200
+        assert farmer_two_login.status_code == 200
+        farmer_one_auth = {"Authorization": f"Bearer {farmer_one_login.json()['access_token']}"}
+        farmer_two_auth = {"Authorization": f"Bearer {farmer_two_login.json()['access_token']}"}
+
+        assert client.get("/farmer/crop-history").status_code == 401
+
+        first_record = {
+            "year": 2022,
+            "crop_name": "Rice",
+            "season": "Kharif",
+            "cultivated_area_acres": 1.5,
+            "yield_quantity": 1200,
+            "yield_unit": "kg",
+            "soil_type": "Laterite Soil",
+            "soil_ph": 6.2,
+            "irrigation_type": "Rainfed",
+            "profit": 25000,
+        }
+        second_record = {**first_record, "crop_name": "Banana", "season": "Year-round", "profit": None}
+        invalid_response = client.post(
+            "/farmer/crop-history",
+            json={"records": [{**first_record, "soil_ph": 15}]},
+            headers=farmer_one_auth,
+        )
+        assert invalid_response.status_code == 422
+
+        create_response = client.post(
+            "/farmer/crop-history",
+            json={"records": [first_record, second_record]},
+            headers=farmer_one_auth,
+        )
+        assert create_response.status_code == 200
+        records = create_response.json()["records"]
+        assert len(records) == 2
+        record_id = records[0]["id"]
+
+        assert client.get("/farmer/crop-history", headers=farmer_two_auth).json()["records"] == []
+        assert client.put(
+            f"/farmer/crop-history/{record_id}",
+            json={**first_record, "crop_name": "Maize"},
+            headers=farmer_two_auth,
+        ).status_code == 404
+
+        update_response = client.put(
+            f"/farmer/crop-history/{record_id}",
+            json={**first_record, "crop_name": "Maize"},
+            headers=farmer_one_auth,
+        )
+        assert update_response.status_code == 200
+        assert update_response.json()["record"]["crop_name"] == "Maize"
+
+        assert client.delete(
+            f"/farmer/crop-history/{record_id}",
+            headers=farmer_one_auth,
+        ).status_code == 200
+        remaining = client.get("/farmer/crop-history", headers=farmer_one_auth).json()["records"]
+        assert len(remaining) == 1
+        assert remaining[0]["crop_name"] == "Banana"
+        assert client.post("/logout", headers=farmer_one_auth).status_code == 200
+        assert client.get("/farmer/crop-history", headers=farmer_one_auth).status_code == 401
+        relogin = client.post("/login", json={"name": "Farmer One", "password": "pass1"})
+        assert relogin.status_code == 200
+        relogin_auth = {"Authorization": f"Bearer {relogin.json()['access_token']}"}
+        persisted_records = client.get("/farmer/crop-history", headers=relogin_auth).json()["records"]
+        assert len(persisted_records) == 1
+        assert persisted_records[0]["crop_name"] == "Banana"
+        assert persisted_records[0]["year"] == 2022
+        client.post("/logout", headers=relogin_auth)
+        client.post("/logout", headers=farmer_two_auth)
 
 
 class TestDistrictMarketPricesEndpoint:

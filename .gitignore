@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+*.sqlite3
+.pytest_cache/
+
+# Environment variables & secrets
+.env
+.env.local
+
+# Node & Frontend
+node_modules/
+dist/
+.vite/
+.vite-temp/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Large binary / document files
+*.pptx
+*.docx
+*.zip
+

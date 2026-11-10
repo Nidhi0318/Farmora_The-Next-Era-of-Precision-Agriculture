@@ -1,0 +1,9 @@
+L1283: >RTC Record<
+L1293: >RTC Record<
+L1304: >Open-Meteo 0-7cm<
+L1314: >Open-Meteo Volumetric<
+L1381: attr title="Click to view cultivar details"
+L1621: >Source: data.gov.in<
+L1727: >Botanical Genus:<
+L2168: >Please enter your survey number above to discover adjacent farmers.<
+L2434: >No varieties match the selected filters. Select "All Seasons" or clear your search.<

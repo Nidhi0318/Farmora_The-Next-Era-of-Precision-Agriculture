@@ -1,0 +1,6 @@
+﻿// Updated Bengaluru Urban Hoblis - Comprehensive
+"Bengaluru North": ["Kasaba Hobli", "Yeshwanthpur Hobli", "Dasarahalli Hobli", "Yelahanka Hobli", "Jala Hobli", "Hesaraghatta Hobli", "Byatarayanapura Hobli", "Kodigehalli Hobli", "Vidyaranyapura Hobli", "Yelahanka New Town Hobli", "Jakkur Hobli", "Thanisandra Hobli", "Hebbal Hobli", "RT Nagar Hobli", "Malleshwaram Hobli", "Rajajinagar Hobli"],
+"Bengaluru South": ["Kasaba Hobli", "Uttarahalli Hobli", "Kengeri Hobli", "Tavarekere Hobli", "Begur Hobli", "Bommanahalli Hobli", "Gottigere Hobli", "Banashankari Hobli", "JP Nagar Hobli", "Padmanabhanagar Hobli", "Kumaraswamy Layout Hobli", "Jayanagar Hobli"],
+"Bengaluru East": ["Krishnarajapuram Hobli", "Bidarahalli Hobli", "K.R. Puram Hobli", "Varthur Hobli", "Mahadevapura Hobli", "Whitefield Hobli", "Hoodi Hobli", "Marathahalli Hobli", "Bellandur Hobli", "Sarjapur Hobli", "Hoskote Hobli"],
+"Anekal": ["Anekal Kasaba Hobli", "Attibele Hobli", "Jigani Hobli", "Sarjapura Hobli", "Chandapura Hobli", "Huskur Hobli", "Marsur Hobli", "Bannerghatta Hobli"],
+"Yelahanka": ["Yelahanka Kasaba Hobli", "Jala Hobli", "Hesaraghatta Hobli", "Doddaballapura Road Hobli", "Singanayakanahalli Hobli", "Bagalur Hobli", "Bettahalsur Hobli", "Sonnappanahalli Hobli"],

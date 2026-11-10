@@ -1,0 +1,34 @@
+Total records today: 27
+Records returned: 10
+
+Districts and their Markets:
+  Bagalkot:
+    - Jamakhandi APMC
+  Bangalore:
+    - Ramanagara APMC
+  Koppal:
+    - Kustagi APMC
+
+Commodities (10):
+  Ashgourd
+  Beans
+  Bengal Gram(Gram)(Whole)
+  Bitter gourd
+  Brinjal
+  Drumstick
+  Ladies Finger
+  Ridgeguard(Tori)
+  Sunflower/Sunflower Seed
+  Sweet Pumpkin
+
+All records:
+  Bangalore | Ramanagara APMC | Brinjal | Round | Min:2400 Max:3200 Modal:2800 | 19/04/2026
+  Bangalore | Ramanagara APMC | Drumstick | Drumstick | Min:4400 Max:6000 Modal:5500 | 19/04/2026
+  Bagalkot | Jamakhandi APMC | Sunflower/Sunflower Seed | Sunflower | Min:6000 Max:6500 Modal:6250 | 19/04/2026
+  Bangalore | Ramanagara APMC | Ashgourd | Ashgourd | Min:1200 Max:2400 Modal:2000 | 19/04/2026
+  Bangalore | Ramanagara APMC | Beans | Beans (Whole) | Min:7000 Max:9000 Modal:8000 | 19/04/2026
+  Koppal | Kustagi APMC | Bengal Gram(Gram)(Whole) | Average (Whole) | Min:5400 Max:5400 Modal:5400 | 19/04/2026
+  Bangalore | Ramanagara APMC | Bitter gourd | Bitter Gourd | Min:2400 Max:3300 Modal:3000 | 19/04/2026
+  Bangalore | Ramanagara APMC | Ladies Finger | Ladies Finger | Min:2400 Max:3500 Modal:3000 | 19/04/2026
+  Bangalore | Ramanagara APMC | Ridgeguard(Tori) | Ridgeguard(Tori) | Min:2000 Max:2800 Modal:2400 | 19/04/2026
+  Bangalore | Ramanagara APMC | Sweet Pumpkin | Sweet Pumpkin | Min:1400 Max:1800 Modal:1600 | 19/04/2026

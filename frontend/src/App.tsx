@@ -1,23 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
-import 'leaflet/dist/leaflet.css';
-import { MapContainer, TileLayer, Polygon, Popup, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
+import { LandingPage } from './components/Landing/LandingPage';
+import farmoraLogoMark from './assets/brand/agriveda-mark.png';
+import blackPepperIcon from './assets/black-pepper.png';
+import cashewIcon from './assets/cashew.png';
+import cottonIcon from './assets/cotton.png';
+import paddyIcon from './assets/paddy.png';
+import pomegranateIcon from './assets/pomegranate.png';
+import profileUserIcon from './assets/profile-user-icon.png';
+import wheatIcon from './assets/wheat.png';
 import {
     indiaStates,
     getDistrictsForState,
     getTaluksForDistrict,
     getHoblisForTaluk
 } from './data/locations';
-import { type Language, getCropName, t, getSoilName, getWeatherDesc } from './data/translations';
+import {
+    type Language,
+    getCropName,
+    t,
+    getSoilName,
+    toKannadaDigits,
+    formatUnit,
+    getDistrictName,
+    getTalukName,
+    getFarmerName
+} from './data/translations';
 
-// Fix Leaflet default icon issues in React
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
 interface CropPrice {
     crop: string;
     price: string;
@@ -62,6 +71,8 @@ interface CropVariety {
     growing_months?: string;
     best_regions?: string[];
     image_url?: string;
+    image_credit?: string;
+    image_source?: string;
     suitability_score?: number;
     suitability_level?: string;
     suitability_color?: string;
@@ -100,13 +111,40 @@ interface ProfitEstimate {
     price_history_5yr: { year: number; avg_price: number }[];
 }
 
+interface FarmerCropHistoryRecord {
+    id: number;
+    year: number;
+    crop_name: string;
+    season: string;
+    cultivated_area_acres: number;
+    yield_quantity: number;
+    yield_unit: string;
+    soil_type: string;
+    soil_ph: number;
+    irrigation_type: string;
+    profit: number | null;
+}
+
+interface CropHistoryDraft {
+    year: string;
+    crop_name: string;
+    season: string;
+    cultivated_area_acres: string;
+    yield_quantity: string;
+    yield_unit: string;
+    soil_type: string;
+    soil_ph: string;
+    irrigation_type: string;
+    profit: string;
+}
+
 function App() {
     const [isRegistered, setIsRegistered] = useState(false);
+    const [showLanding, setShowLanding] = useState(true);
     const [lang, setLang] = useState<Language>('en');
 
     // Form States
     const [name, setName] = useState('');
-    const [aadhaarNumber, setAadhaarNumber] = useState('');
     const [surveyNumber, setSurveyNumber] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [stateLoc, setStateLoc] = useState('Karnataka');
@@ -115,6 +153,7 @@ function App() {
     const [hobli, setHobli] = useState('Karwar Kasaba');
     const [landAcres, setLandAcres] = useState('');
     const [landGuntas, setLandGuntas] = useState('');
+    const [registrationCrop, setRegistrationCrop] = useState('');
 
     const [taluksList, setTaluksList] = useState<string[]>(getTaluksForDistrict('Uttara Kannada'));
     const [hoblisList, setHoblisList] = useState<string[]>(getHoblisForTaluk('Karwar'));
@@ -126,6 +165,7 @@ function App() {
     const [loginPassword, setLoginPassword] = useState('');
     const [regPassword, setRegPassword] = useState('');
     const [loadingLogin, setLoadingLogin] = useState(false);
+    const [accessToken, setAccessToken] = useState('');
 
     // Dashboard States
     const [registeredUser, setRegisteredUser] = useState<{
@@ -133,13 +173,27 @@ function App() {
         taluk: string,
         district: string,
         state?: string,
-        aadhaar_number: string,
+        hobli?: string,
+        aadhaar_number?: string,
         survey_number: string,
         phone_number?: string,
         land_area_acres?: number,
         land_area_guntas?: number,
-        primary_crop?: string
+        primary_crop?: string,
+        soil_type?: string,
+        database?: string
     } | null>(null);
+
+    // Profile Editing States (Direct MySQL Workbench Sync)
+    const [isEditingProfile, setIsEditingProfile] = useState(false);
+    const [editPhone, setEditPhone] = useState('');
+    const [editSurvey, setEditSurvey] = useState('');
+    const [editAcres, setEditAcres] = useState('');
+    const [editGuntas, setEditGuntas] = useState('');
+    const [editPrimaryCrop, setEditPrimaryCrop] = useState('');
+    const [editSoilType, setEditSoilType] = useState('');
+    const [savingProfile, setSavingProfile] = useState(false);
+
     const [recommendations, setRecommendations] = useState<any>(null);
     const [marketPrices, setMarketPrices] = useState<CropPrice[]>([]);
 
@@ -276,6 +330,12 @@ function App() {
 
     // Farmer History States
     const [farmerHistory, setFarmerHistory] = useState<{ info: any, history: any[] } | null>(null);
+    const [cropHistoryRecords, setCropHistoryRecords] = useState<FarmerCropHistoryRecord[]>([]);
+    const [showCropHistoryForm, setShowCropHistoryForm] = useState(false);
+    const [editingCropHistoryId, setEditingCropHistoryId] = useState<number | null>(null);
+    const [cropHistoryDrafts, setCropHistoryDrafts] = useState<CropHistoryDraft[]>([]);
+    const [savingCropHistory, setSavingCropHistory] = useState(false);
+    const [cropHistoryError, setCropHistoryError] = useState('');
 
     // Neighbour Planting States
     interface VarietyBreakdown {
@@ -347,15 +407,9 @@ function App() {
         data_badge?: string;
         data_source_label?: string;
     }
-    const [neighbourData, setNeighbourData] = useState<NeighbourData | null>(null);
-    const [loadingNeighbours, setLoadingNeighbours] = useState(false);
-    const [neighbourScope, setNeighbourScope] = useState<'taluk' | 'hobli'>('taluk');
+    const [_neighbourData, setNeighbourData] = useState<NeighbourData | null>(null);
     const [selectedNeighbourHobli, setSelectedNeighbourHobli] = useState('');
-    const [selectedCropFilter, setSelectedCropFilter] = useState<string | null>(null);
-
-    const [detectingLocation, setDetectingLocation] = useState(false);
-    const [gpsActive, setGpsActive] = useState(false);
-    const [gpsCoords, setGpsCoords] = useState<{lat: number, lon: number} | null>(null);
+    const [gpsCoords] = useState<{lat: number, lon: number} | null>(null);
 
     interface BhoomiParcel {
         survey_number: string;
@@ -388,11 +442,11 @@ function App() {
     const [bhoomiMapData, setBhoomiMapData] = useState<BhoomiMapData | null>(null);
     const [loadingBhoomiMap, setLoadingBhoomiMap] = useState(false);
 
-    const [activeTab, setActiveTab] = useState<'recommendation' | 'prices' | 'neighbours' | 'history'>('recommendation');
+    const [activeTab, setActiveTab] = useState<'profile' | 'recommendation' | 'prices' | 'neighbours' | 'history'>('recommendation');
     const [showPassword, setShowPassword] = useState(false);
     const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-    const availableCrops = ['Rice', 'Banana', 'Arecanut', 'Pepper', 'Cashew', 'Rubber', 'Coconut', 'Coffee', 'Cardamom', 'Ginger', 'Jowar', 'Cotton', 'Maize', 'Bengal Gram', 'Red Gram', 'Wheat', 'Pomegranate', 'Ragi', 'Groundnut', 'Sugarcane', 'Tomato', 'Mango', 'Onion', 'Potato', 'Turmeric', 'Chilli'];
+    const availableCrops = ['Rice', 'Banana', 'Arecanut', 'Pepper', 'Cashew', 'Rubber', 'Coconut', 'Coffee', 'Cardamom', 'Ginger', 'Jowar', 'Cotton', 'Maize', 'Bengal Gram', 'Red Gram', 'Wheat', 'Pomegranate', 'Ragi', 'Groundnut', 'Sugarcane', 'Tomato', 'Mango', 'Onion', 'Potato', 'Turmeric', 'Chilli', 'Sunflower'];
 
     // Cascading logic
     useEffect(() => {
@@ -484,6 +538,20 @@ function App() {
         }
     };
 
+    const fetchCropHistory = async (token: string) => {
+        const response = await fetch('http://localhost:8000/farmer/crop-history', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || 'Failed to load crop history');
+        }
+        const data = await response.json();
+        const records: FarmerCropHistoryRecord[] = data.records || [];
+        setCropHistoryRecords(records);
+        return records;
+    };
+
     const fetchFarmerHistory = async (name: string, phone: string) => {
         try {
             const res = await fetch(`http://localhost:8000/farmer-lookup?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
@@ -505,16 +573,125 @@ function App() {
         return null;
     };
 
-    const fetchBhoomiMapData = async (userTaluk: string, userHobli?: string, userCropOverride?: string) => {
+    const createCropHistoryDraft = (): CropHistoryDraft => ({
+        year: String(new Date().getFullYear()),
+        crop_name: '',
+        season: 'Kharif',
+        cultivated_area_acres: '1',
+        yield_quantity: '',
+        yield_unit: 'kg',
+        soil_type: soilData?.soil_type || 'Laterite Soil',
+        soil_ph: String(soilData?.ph || 6.2),
+        irrigation_type: 'Rainfed',
+        profit: ''
+    });
+
+    const openCropHistoryForm = (record?: FarmerCropHistoryRecord) => {
+        setEditingCropHistoryId(record?.id ?? null);
+        setCropHistoryDrafts(record ? [{
+            year: String(record.year),
+            crop_name: record.crop_name,
+            season: record.season,
+            cultivated_area_acres: String(record.cultivated_area_acres),
+            yield_quantity: String(record.yield_quantity),
+            yield_unit: record.yield_unit,
+            soil_type: record.soil_type,
+            soil_ph: String(record.soil_ph),
+            irrigation_type: record.irrigation_type,
+            profit: record.profit === null ? '' : String(record.profit)
+        }] : [createCropHistoryDraft()]);
+        setCropHistoryError('');
+        setShowCropHistoryForm(true);
+    };
+
+    const handleCropHistoryDraftChange = (index: number, field: keyof CropHistoryDraft, value: string) => {
+        setCropHistoryDrafts(current => current.map((draft, draftIndex) =>
+            draftIndex === index ? { ...draft, [field]: value } : draft
+        ));
+    };
+
+    const handleSaveCropHistory = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!accessToken) {
+            setCropHistoryError(t('cropHistoryLoginRequired', lang));
+            return;
+        }
+
+        setSavingCropHistory(true);
+        setCropHistoryError('');
+        try {
+            const records = cropHistoryDrafts.map(draft => ({
+                year: Number(draft.year),
+                crop_name: draft.crop_name.trim(),
+                season: draft.season,
+                cultivated_area_acres: Number(draft.cultivated_area_acres),
+                yield_quantity: Number(draft.yield_quantity),
+                yield_unit: draft.yield_unit,
+                soil_type: draft.soil_type.trim(),
+                soil_ph: Number(draft.soil_ph),
+                irrigation_type: draft.irrigation_type,
+                profit: draft.profit.trim() === '' ? null : Number(draft.profit)
+            }));
+            const isEditing = editingCropHistoryId !== null;
+            const response = await fetch(
+                isEditing
+                    ? `http://localhost:8000/farmer/crop-history/${editingCropHistoryId}`
+                    : 'http://localhost:8000/farmer/crop-history',
+                {
+                    method: isEditing ? 'PUT' : 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${accessToken}`
+                    },
+                    body: JSON.stringify(isEditing ? records[0] : { records })
+                }
+            );
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || t('cropHistorySaveFailed', lang));
+            }
+            await fetchCropHistory(accessToken);
+            setShowCropHistoryForm(false);
+            setEditingCropHistoryId(null);
+            setCropHistoryDrafts([]);
+        } catch (error) {
+            console.error('Crop history save failed', error);
+            setCropHistoryError(error instanceof Error ? error.message : t('cropHistorySaveFailed', lang));
+        } finally {
+            setSavingCropHistory(false);
+        }
+    };
+
+    const handleDeleteCropHistory = async (recordId: number) => {
+        if (!accessToken || !window.confirm(t('confirmDeleteCropHistory', lang))) return;
+        setCropHistoryError('');
+        try {
+            const response = await fetch(`http://localhost:8000/farmer/crop-history/${recordId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || t('cropHistoryDeleteFailed', lang));
+            }
+            await fetchCropHistory(accessToken);
+        } catch (error) {
+            console.error('Crop history delete failed', error);
+            setCropHistoryError(error instanceof Error ? error.message : t('cropHistoryDeleteFailed', lang));
+        }
+    };
+
+    const fetchBhoomiMapData = async (userTaluk: string, userHobli?: string, userCropOverride?: string, surveyOverride?: string) => {
         setLoadingBhoomiMap(true);
         try {
+            const activeSurvey = (surveyOverride !== undefined ? surveyOverride : calcSurveyNumber) || registeredUser?.survey_number || farmerHistory?.info?.survey_number || '120';
             const params = new URLSearchParams({
                 taluk: userTaluk,
                 user_name: registeredUser?.name || 'You',
                 user_acres: (registeredUser?.land_area_acres ?? 2).toString(),
                 user_guntas: (registeredUser?.land_area_guntas ?? 0).toString(),
                 user_crop: userCropOverride || farmerHistory?.info?.primary_crop || registeredUser?.primary_crop || 'Rice',
-                survey_number: calcSurveyNumber || registeredUser?.survey_number || farmerHistory?.info?.survey_number || '120'
+                survey_number: activeSurvey.trim()
             });
             if (userHobli) params.set('hobli', userHobli);
             if (gpsCoords) {
@@ -534,7 +711,6 @@ function App() {
     };
 
     const fetchNeighbourData = async (userTaluk: string, hobli?: string, excludeName?: string, userCropOverride?: string) => {
-        setLoadingNeighbours(true);
         try {
             let url = `http://localhost:8000/neighbour-planting/${encodeURIComponent(userTaluk)}`;
             const params = new URLSearchParams();
@@ -553,84 +729,71 @@ function App() {
             await fetchBhoomiMapData(userTaluk, hobli, userCropOverride);
         } catch (e) {
             console.error("Neighbour data fetch failed", e);
-        } finally {
-            setLoadingNeighbours(false);
         }
     };
 
-    const handleGPSDetect = (isDashboard: boolean = false) => {
-        if (!navigator.geolocation) {
-            alert("Geolocation is not supported by your browser");
-            return;
+    const startEditingProfile = () => {
+        setEditPhone(registeredUser?.phone_number || farmerHistory?.info?.phone || '');
+        setEditSurvey(registeredUser?.survey_number || farmerHistory?.info?.survey_number || '');
+        setEditAcres((registeredUser?.land_area_acres ?? farmerHistory?.info?.acres ?? 0).toString());
+        setEditGuntas((registeredUser?.land_area_guntas ?? farmerHistory?.info?.guntas ?? 0).toString());
+        setEditPrimaryCrop(registeredUser?.primary_crop || farmerHistory?.info?.primary_crop || 'Rice');
+        setEditSoilType(registeredUser?.soil_type || farmerHistory?.info?.soil_type || soilData?.soil_type || 'Laterite Soil');
+        setIsEditingProfile(true);
+    };
+
+    const handleSaveProfile = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSavingProfile(true);
+        try {
+            const farmerName = registeredUser?.name || farmerHistory?.info?.name || '';
+            const payload = {
+                name: farmerName,
+                phone_number: editPhone,
+                survey_number: editSurvey,
+                land_area_acres: parseFloat(editAcres) || 0,
+                land_area_guntas: parseFloat(editGuntas) || 0,
+                primary_crop: editPrimaryCrop,
+                soil_type: editSoilType
+            };
+            const response = await fetch('http://localhost:8000/farmer/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (response.ok) {
+                const resData = await response.json();
+                // Update local state
+                setRegisteredUser(prev => prev ? {
+                    ...prev,
+                    phone_number: editPhone,
+                    survey_number: editSurvey,
+                    land_area_acres: parseFloat(editAcres) || 0,
+                    land_area_guntas: parseFloat(editGuntas) || 0,
+                    primary_crop: editPrimaryCrop,
+                    soil_type: editSoilType,
+                    database: resData?.database || "MySQL Workbench (farmer_portal)"
+                } : null);
+
+                setCalcSurveyNumber(editSurvey);
+                // Re-fetch farmer history and cadastre map
+                await fetchFarmerHistory(farmerName, editPhone);
+                if (registeredUser?.taluk) {
+                    await fetchBhoomiMapData(registeredUser.taluk, registeredUser.hobli, editPrimaryCrop, editSurvey);
+                }
+                setIsEditingProfile(false);
+                alert(lang === 'kn'
+                    ? "✅ ರೈತರ ವಿವರಗಳನ್ನು MySQL Workbench ನಲ್ಲಿ ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಿಸಲಾಗಿದೆ!"
+                    : "✅ Farmer profile successfully updated and saved in MySQL Workbench!");
+            } else {
+                alert(lang === 'kn' ? "❌ ಪ್ರೊಫೈಲ್ ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಿಲ್ಲ." : "❌ Failed to update profile in MySQL Workbench.");
+            }
+        } catch (err) {
+            console.error("Profile update error", err);
+            alert(lang === 'kn' ? "❌ ಸರ್ವರ್ ದೋಷ." : "❌ Error updating profile in MySQL Workbench.");
+        } finally {
+            setSavingProfile(false);
         }
-
-        setDetectingLocation(true);
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                setGpsCoords({ lat, lon });
-
-                try {
-                    const res = await fetch(`http://localhost:8000/reverse-geocode?lat=${lat}&lon=${lon}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (data.status === "success" || data.status === "fallback") {
-                            if (isDashboard) {
-                                // Dynamically update active dashboard locations
-                                setRegisteredUser(prev => prev ? {
-                                    ...prev,
-                                    district: data.district,
-                                    taluk: data.taluk
-                                } : null);
-                                setGpsActive(true);
-
-                                // Refetch location-specific dashboard elements
-                                fetchWeather(data.taluk || data.district);
-                                fetchSoilData(data.taluk, data.district);
-                                setSelectedDistrict(data.district);
-                                fetchLiveMarketPrices(data.district);
-                                fetchNeighbourData(data.taluk, undefined, registeredUser?.name, farmerHistory?.info?.primary_crop);
-                                alert(`📍 Location updated to ${data.taluk}, ${data.district} via GPS! Dashboard prediction updated.`);
-                            } else {
-                                // Auto-fill Registration Form
-                                setStateLoc(data.state);
-                                
-                                // Manually load cascades to bypass select lifecycle lags
-                                const taluks = getTaluksForDistrict(data.district);
-                                setTaluksList(taluks);
-                                const hoblis = getHoblisForTaluk(data.taluk);
-                                setHoblisList(hoblis);
-                                
-                                setDistrict(data.district);
-                                setTaluk(data.taluk);
-                                setHobli(data.hobli);
-                                alert(`📍 GPS auto-detected: ${data.hobli}, ${data.taluk}, ${data.district}, ${data.state}`);
-                            }
-                        } else {
-                            alert("Failed to resolve address components from GPS coordinates.");
-                        }
-                    } else {
-                        alert("Geocoding server error. Using dropdown selections.");
-                    }
-                } catch (err) {
-                    console.error("GPS Reverse geocoding failed", err);
-                    alert("Error communicating with geocoding API.");
-                } finally {
-                    setDetectingLocation(false);
-                }
-            },
-            (error) => {
-                setDetectingLocation(false);
-                console.error("Geolocation error", error);
-                let msg = "Failed to retrieve GPS location.";
-                if (error.code === error.PERMISSION_DENIED) {
-                    msg = "Location permission denied. Please allow location access in your browser settings.";
-                }
-                alert(msg);
-            },
-            { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-        );
     };
 
     const handleRegister = async (e: React.FormEvent) => {
@@ -638,10 +801,11 @@ function App() {
         setLoadingRegister(true);
         try {
             const payload = {
-                name, aadhaar_number: aadhaarNumber, survey_number: surveyNumber, phone_number: phoneNumber,
+                name, aadhaar_number: '', survey_number: surveyNumber, phone_number: phoneNumber,
                 state: stateLoc, district: district || 'N/A',
                 taluk: taluk || 'N/A', hobli: hobli || 'N/A',
                 password: regPassword,
+                primary_crop: registrationCrop,
                 land_area_acres: parseFloat(landAcres) || 0,
                 land_area_guntas: parseFloat(landGuntas) || 0
             };
@@ -651,16 +815,21 @@ function App() {
                 body: JSON.stringify(payload)
             });
             if (response.ok) {
-                alert("Registration successful! Please login.");
+                const resData = await response.json();
+                const dbSource = resData?.database || 'MySQL Workbench (farmer_portal)';
+                alert(lang === 'kn' 
+                    ? `✅ ನೋಂದಣಿ ಯಶಸ್ವಿಯಾಗಿದೆ! ನಿಮ್ಮ ವಿವರಗಳನ್ನು ${dbSource} ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಆಗಿ.` 
+                    : `✅ Registration successful! Your farmer info has been saved to ${dbSource}. Please login.`);
                 setIsLoginMode(true);
-                // Clear registration fields
+                setLoginName(name);
+                setLoginPassword('');
                 setRegPassword('');
             } else {
-                alert("Registration failed. Please check your inputs.");
+                alert(lang === 'kn' ? "ನೋಂದಣಿ ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ." : "Registration failed. Please check your inputs.");
             }
         } catch (e) {
             console.error("Registration error", e);
-            alert("Error connecting to server.");
+            alert(lang === 'kn' ? "ಸರ್ವರ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ." : "Error connecting to server.");
         } finally {
             setLoadingRegister(false);
         }
@@ -679,6 +848,7 @@ function App() {
             if (response.ok) {
                 const data = await response.json();
                 const user = data.user;
+                setAccessToken(data.access_token || '');
                 setRegisteredUser(user);
                 setIsRegistered(true);
                 if (user.survey_number) {
@@ -691,32 +861,51 @@ function App() {
                 fetchMarketPrices();
                 setSelectedDistrict(user.district || '');
                 fetchLiveMarketPrices(user.district || '');
+                try {
+                    await fetchCropHistory(data.access_token || '');
+                    setCropHistoryError('');
+                } catch (error) {
+                    console.error('Crop history lookup failed', error);
+                    setCropHistoryError(error instanceof Error ? error.message : 'Failed to load crop history');
+                }
                 const historyData = await fetchFarmerHistory(user.name, user.phone_number || '');
                 const userCrop = historyData?.info?.primary_crop || 'Rice';
                 fetchNeighbourData(user.taluk || 'Mangaluru', undefined, user.name, userCrop);
             } else {
                 const err = await response.json();
                 if (response.status === 404) {
-                    alert("❌ Name not found. Please register first or check your spelling.");
+                    alert(lang === 'kn' ? "❌ ಹೆಸರು ಕಂಡುಬಂದಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೊದಲು ನೋಂದಾಯಿಸಿ ಅಥವಾ ಕಾಗುಣಿತ ಪರಿಶೀಲಿಸಿ." : "❌ Name not found. Please register first or check your spelling.");
                 } else if (response.status === 401) {
-                    alert("❌ Password incorrect. Please try again.");
+                    alert(lang === 'kn' ? "❌ ಪಾಸ್‌ವರ್ಡ್ ತಪ್ಪಾಗಿದೆ. ದಯವಿಟ್ಟು ಪುನಃ ಪ್ರಯತ್ನಿಸಿ." : "❌ Password incorrect. Please try again.");
                 } else {
-                    alert(err.detail || "Login failed. Please try again later.");
+                    alert(err.detail || (lang === 'kn' ? "ಲಾಗಿನ್ ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ನಂತರ ಪ್ರಯತ್ನಿಸಿ." : "Login failed. Please try again later."));
                 }
             }
         } catch (e) {
             console.error("Login error", e);
-            alert("Error connecting to server.");
+            alert(lang === 'kn' ? "ಸರ್ವರ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ." : "Error connecting to server.");
         } finally {
             setLoadingLogin(false);
         }
     };
 
     const handleLogout = () => {
+        if (accessToken) {
+            fetch('http://localhost:8000/logout', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${accessToken}` }
+            }).catch(error => console.error('Logout request failed', error));
+        }
+        setAccessToken('');
+        setCropHistoryRecords([]);
+        setShowCropHistoryForm(false);
+        setCropHistoryDrafts([]);
+        setCropHistoryError('');
         setIsRegistered(false);
         setRegisteredUser(null);
         setLoginName('');
         setLoginPassword('');
+        setShowLanding(true);
     };
 
     const handleCropRecommendation = async () => {
@@ -814,29 +1003,92 @@ function App() {
     };
 
     const cropEmojis: Record<string, string> = {
-        'Rice': '🌾', 'Banana': '🍌', 'Arecanut': '🌴',
-        'Pepper': '🌶️', 'Cashew': '🥜', 'Rubber': '🌳',
-        'Coconut': '🥥', 'Wheat': '🌾', 'Sugarcane': '🎋',
-        'Cotton': '☁️', 'Coffee': '☕', 'Cardamom': '🌱',
-        'Ginger': '🥔', 'Jowar': '🌾', 'Maize': '🌽',
-        'Bengal Gram': '🥜', 'Red Gram': '🫘', 'Pomegranate': '🍎',
+        'Banana': '🍌', 'Arecanut': '🌴', 'Sunflower': '🌻',
+        'Rubber': '🌳',
+        'Coconut': '🥥', 'Sugarcane': '🎋',
+        'Cotton': '🌱', 'Coffee': '☕', 'Cardamom': '🌱',
+        'Ginger': '🫚', 'Jowar': '🌾', 'Maize': '🌽',
+        'Bengal Gram': '🫘', 'Red Gram': '🫘', 'Pomegranate': '🍎',
         'Ragi': '🌾', 'Groundnut': '🥜', 'Tomato': '🍅',
         'Mango': '🥭', 'Onion': '🧅', 'Potato': '🥔',
         'Turmeric': '🌿', 'Chilli': '🌶️'
     };
 
+    const cropIcons: Record<string, string> = {
+        Pepper: blackPepperIcon,
+        Cashew: cashewIcon,
+        Cotton: cottonIcon,
+        Pomegranate: pomegranateIcon,
+        Rice: paddyIcon,
+        Wheat: wheatIcon
+    };
+
+    const getCropIcon = (crop: string, fallback: string): React.ReactNode =>
+        cropIcons[crop]
+            ? <img src={cropIcons[crop]} alt="" className="crop-image-icon" />
+            : cropEmojis[crop] || fallback;
+
+    const kd = (v: any) => toKannadaDigits(v, lang);
+    const fu = (unit: string) => formatUnit(unit, lang);
+    const dn = (district: string) => getDistrictName(district, lang);
+    const tn = (taluk: string) => getTalukName(taluk, lang);
+    const fn = (name?: string) => getFarmerName(name, lang);
+
+    if (!isRegistered && showLanding) {
+        return (
+            <LandingPage
+                onLogin={() => {
+                    setIsLoginMode(true);
+                    setShowLanding(false);
+                }}
+                onGetStarted={() => {
+                    setIsLoginMode(false);
+                    setShowLanding(false);
+                }}
+            />
+        );
+    }
+
     if (!isRegistered) {
         return (
             <div className="registration-container">
                 <header className="reg-header">
-                    <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', width: '100%', maxWidth: '420px', margin: '0 auto 0.75rem' }}>
+                        <button
+                            type="button"
+                            className="back-to-landing-btn"
+                            onClick={() => setShowLanding(true)}
+                            style={{
+                                background: 'rgba(255, 255, 255, 0.9)',
+                                border: '1px solid #c7d2fe',
+                                borderRadius: '8px',
+                                padding: '0.35rem 0.75rem',
+                                color: '#1b4332',
+                                cursor: 'pointer',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.35rem'
+                            }}
+                        >
+                            ← {lang === 'kn' ? 'ಮುಖಪುಟ' : 'Back to Home'}
+                        </button>
                         <div className="lang-switcher">
                             <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>🇬🇧 English</button>
                             <button className={lang === 'kn' ? 'active' : ''} onClick={() => setLang('kn')}>🇮🇳 ಕನ್ನಡ</button>
                         </div>
                     </div>
-                    <h1>{t('portalTitle', lang)}</h1>
-                    <p className="reg-tagline">{t('portalSubtitle', lang)}</p>
+                    <h1>
+                        <img src={farmoraLogoMark} alt="Farmora" className="brand-mark" />
+                        <span>{t('portalTitle', lang)}</span>
+                    </h1>
+                    <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        <p className="reg-tagline">
+                            <span className="reg-tagline-sparkle">✦</span>
+                            <span>{t('portalSubtitle', lang)}</span>
+                        </p>
+                    </div>
                 </header>
 
                 <div className="registration-card glass">
@@ -896,23 +1148,15 @@ function App() {
                         </div>
                     ) : (
                         <div className="registration-section">
-                            <h2>{t('joinCommunity', lang)}</h2>
-                            <p className="auth-subtitle">{t('registerSubtitle', lang)}</p>
                             <form onSubmit={handleRegister} className="input-form">
                                 <div className="form-group">
                                     <label>{t('fullName', lang)}</label>
                                     <input type="text" placeholder={t('enterFullName', lang)} value={name} onChange={(e) => setName(e.target.value)} required />
                                 </div>
 
-                                <div className="form-row">
-                                    <div className="form-group">
-                                        <label>{t('aadhaarNumber', lang)}</label>
-                                        <input type="text" placeholder={lang === 'kn' ? '12 ಅಂಕಿಯ ಆಧಾರ್ ಸಂಖ್ಯೆ' : '12-digit Aadhaar number'} value={aadhaarNumber} onChange={(e) => setAadhaarNumber(e.target.value.replace(/\D/g, '').slice(0, 12))} required minLength={12} maxLength={12} pattern="\d{12}" title="Please enter a valid 12-digit Aadhaar number" />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>{t('phoneNumber', lang)}</label>
-                                        <input type="tel" placeholder={lang === 'kn' ? '10 ಅಂಕಿಯ ಮೊಬೈಲ್' : '10-digit mobile'} value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required />
-                                    </div>
+                                <div className="form-group">
+                                    <label>{t('phoneNumber', lang)}</label>
+                                    <input type="tel" placeholder={lang === 'kn' ? '10 ಅಂಕಿಯ ಮೊಬೈಲ್' : '10-digit mobile'} value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required />
                                 </div>
 
                                 <div className="form-row">
@@ -927,7 +1171,7 @@ function App() {
                                         <label>{t('district', lang)}</label>
                                         <select value={district} onChange={(e) => setDistrict(e.target.value)} required disabled={!stateLoc}>
                                             <option value="">{t('selectDistrict', lang)}</option>
-                                            {getDistrictsForState(stateLoc).map(d => <option key={d} value={d}>{d}</option>)}
+                                            {getDistrictsForState(stateLoc).map(d => <option key={d} value={d}>{dn(d)}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -937,14 +1181,14 @@ function App() {
                                         <label>{t('taluk', lang)}</label>
                                         <select value={taluk} onChange={(e) => setTaluk(e.target.value)} required disabled={!district}>
                                             <option value="">{t('selectTaluk', lang)}</option>
-                                            {taluksList.map(tk => <option key={tk} value={tk}>{tk}</option>)}
+                                            {taluksList.map(tk => <option key={tk} value={tk}>{tn(tk)}</option>)}
                                         </select>
                                     </div>
                                     <div className="form-group">
                                         <label>{t('hobli', lang)}</label>
                                         <select value={hobli} onChange={(e) => setHobli(e.target.value)} required disabled={!taluk}>
                                             <option value="">{t('selectHobli', lang)}</option>
-                                            {hoblisList.map(h => <option key={h} value={h}>{h}</option>)}
+                                            {hoblisList.map(h => <option key={h} value={h}>{tn(h)}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -992,6 +1236,25 @@ function App() {
                                     </div>
                                 </div>
 
+                                <div className="form-group">
+                                    <label htmlFor="registration-crop">{t('currentCrop', lang)}</label>
+                                    <input
+                                        id="registration-crop"
+                                        type="text"
+                                        list="registration-crop-options"
+                                        value={registrationCrop}
+                                        onChange={(e) => setRegistrationCrop(e.target.value)}
+                                        placeholder={lang === 'kn' ? 'ಬೆಳೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ ಅಥವಾ ನಮೂದಿಸಿ' : 'Select or type a crop'}
+                                        autoComplete="off"
+                                        required
+                                    />
+                                    <datalist id="registration-crop-options">
+                                        {availableCrops.map(crop => (
+                                            <option key={crop} value={crop} label={getCropName(crop, lang)} />
+                                        ))}
+                                    </datalist>
+                                </div>
+
                                 <button type="submit" className="submit-btn" disabled={loadingRegister}>
                                     {loadingRegister ? <><span className="spinner"></span> {t('registering', lang)}</> : `🌾 ${t('registerBtn', lang)}`}
                                 </button>
@@ -1007,39 +1270,7 @@ function App() {
         <div className="dashboard-container">
             <header className="dashboard-header">
                 <div className="user-info">
-                    <h2>{t('welcomeUser', lang)} {registeredUser?.name || 'Farmer'}</h2>
-                    <p>
-                        {registeredUser?.taluk}, {registeredUser?.district} • {t('aadhaarNo', lang)} {registeredUser?.aadhaar_number ? `XXXX XXXX ${registeredUser.aadhaar_number.slice(-4)}` : ''}
-                        {gpsActive && <span className="gps-active-badge">📍 GPS Live {gpsCoords ? `(${gpsCoords.lat.toFixed(4)}, ${gpsCoords.lon.toFixed(4)})` : ''}</span>}
-                    </p>
-                    {registeredUser?.land_area_acres && (
-                        <p className="user-land-info">📐 {t('registeredLand', lang)} {registeredUser.land_area_acres} {t('acres', lang)}, {registeredUser.land_area_guntas} {t('guntas', lang)}</p>
-                    )}
-                    {weatherData && (
-                        <div className="weather-pill-bar">
-                            <div className="weather-pill-item">
-                                <span>🌤️</span>
-                                <span>{getWeatherDesc(weatherData.description, lang)}</span>
-                            </div>
-                            <div className="weather-pill-item">
-                                <span>🌡️</span>
-                                <span>{t('temperature', lang)}:</span>
-                                <span className="weather-pill-val">{weatherData.temperature}°C</span>
-                            </div>
-                            <div className="weather-pill-item">
-                                <span>💧</span>
-                                <span>{t('humidity', lang)}:</span>
-                                <span className="weather-pill-val">{weatherData.humidity}%</span>
-                            </div>
-                            {soilData && (
-                                <div className="weather-pill-item">
-                                    <span>💦</span>
-                                    <span>{t('soilMoisture', lang)}:</span>
-                                    <span className="weather-pill-val">{soilData.moisture}% VWC</span>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    <h2>{t('welcomeUser', lang)} {fn(registeredUser?.name) || t('farmer', lang)}</h2>
                 </div>
                 <div className="user-profile">
                     <div className="lang-switcher">
@@ -1047,35 +1278,403 @@ function App() {
                         <button className={lang === 'kn' ? 'active' : ''} onClick={() => setLang('kn')}>ಕನ್ನಡ</button>
                     </div>
                     <button
-                        className="gps-update-btn"
-                        onClick={() => handleGPSDetect(true)}
-                        disabled={detectingLocation}
+                        className={`header-profile-btn ${activeTab === 'profile' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('profile')}
+                        title={lang === 'kn' ? 'ರೈತರ ವಿವರ ನೋಡಿ' : 'View Farmer Profile'}
                     >
-                        {detectingLocation ? `⏳ ${t('tracking', lang)}` : `📍 ${t('useGPS', lang)}`}
+                        <span>👨‍🌾</span>
+                        <span className="user-badge">{fn(registeredUser?.name)}</span>
                     </button>
-                    <span className="user-badge">{registeredUser?.name}</span>
                     <button onClick={handleLogout} className="logout-btn">{t('logout', lang)}</button>
                 </div>
             </header>
 
-            <div className="tabs">
-                <button className={activeTab === 'recommendation' ? 'active' : ''} onClick={() => setActiveTab('recommendation')}>
-                    {t('tabCropRec', lang)}
-                </button>
-                <button className={activeTab === 'prices' ? 'active' : ''} onClick={() => setActiveTab('prices')}>
-                    {t('tabMarketPrices', lang)}
-                </button>
-                <button className={activeTab === 'neighbours' ? 'active' : ''} onClick={() => setActiveTab('neighbours')}>
-                    {t('tabNeighbours', lang)}
-                </button>
-                {farmerHistory && (
-                    <button className={activeTab === 'history' ? 'active' : ''} onClick={() => setActiveTab('history')}>
-                        {t('tabFarmAnalysis', lang)}
-                    </button>
-                )}
-            </div>
+            <div className="dashboard-body">
+                {/* Left Side Navigation Sidebar */}
+                <aside className="dashboard-sidebar">
+                    <nav className="sidebar-nav">
+                        <button
+                            className={`sidebar-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('profile')}
+                        >
+                            <img className="nav-icon nav-profile-avatar" src={profileUserIcon} alt="" />
+                            <span className="nav-text">{t('tabProfile', lang)}</span>
+                        </button>
+                        <button
+                            className={`sidebar-nav-item ${activeTab === 'recommendation' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('recommendation')}
+                        >
+                            <span className="nav-icon">🌱</span>
+                            <span className="nav-text">{t('tabCropRec', lang)}</span>
+                        </button>
+                        <button
+                            className={`sidebar-nav-item ${activeTab === 'prices' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('prices')}
+                        >
+                            <span className="nav-icon">📈</span>
+                            <span className="nav-text">{t('tabMarketPrices', lang)}</span>
+                        </button>
+                        <button
+                            className={`sidebar-nav-item ${activeTab === 'neighbours' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('neighbours')}
+                        >
+                            <span className="nav-icon">🏘️</span>
+                            <span className="nav-text">{t('tabNeighbours', lang)}</span>
+                        </button>
+                        {farmerHistory && (
+                            <button
+                                className={`sidebar-nav-item ${activeTab === 'history' ? 'active' : ''}`}
+                                onClick={() => setActiveTab('history')}
+                            >
+                                <span className="nav-icon">📊</span>
+                                <span className="nav-text">{t('tabFarmAnalysis', lang)}</span>
+                            </button>
+                        )}
+                    </nav>
+                </aside>
 
-            <main className="dashboard-content">
+                <main className="dashboard-content">
+
+
+                {/* ===== FULL FARMER PROFILE SECTION ===== */}
+                {activeTab === 'profile' && (
+                    <div className="section-card profile-page-card">
+                        <div className="profile-section-title-bar">
+                            <div className="profile-title-left">
+                                <span className="profile-title-avatar">👨‍🌾</span>
+                                <div>
+                                    <h2>{fn(registeredUser?.name || farmerHistory?.info?.name) || t('farmer', lang)} — {t('farmerProfileTitle', lang)}</h2>
+                                    <p className="profile-title-sub">
+                                        🏛️ {tn(registeredUser?.hobli || farmerHistory?.info?.hobli || 'Kasaba')}, {tn(registeredUser?.taluk || 'Taluk')}, {dn(registeredUser?.district || 'District')}, {dn(registeredUser?.state || 'Karnataka')}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="profile-title-right">
+                                <span className="farmer-status-pill">✓ {lang === 'kn' ? 'ದೃಢೀಕೃತ ರೈತ ಖಾತೆ' : 'Verified Farmer Profile'}</span>
+                                <button className="profile-edit-trigger-btn" onClick={startEditingProfile}>
+                                    ✏️ {lang === 'kn' ? 'ಮಾಹಿತಿ ತಿದ್ದುಪಡಿ' : 'Edit Profile'}
+                                </button>
+                                <span className="profile-reg-id">ID: {kd(farmerHistory?.info?.id || 'FP-1001')}</span>
+                            </div>
+                        </div>
+
+                        {/* Edit Profile Form / Modal */}
+                        {isEditingProfile && (
+                            <div className="profile-edit-card glass">
+                                <div className="profile-edit-header">
+                                    <div className="profile-edit-title">
+                                        <span className="profile-edit-icon">✏️</span>
+                                        <div>
+                                            <h3>{lang === 'kn' ? 'ರೈತರ ವಿವರಗಳನ್ನು ತಿದ್ದುಪಡಿ ಮಾಡಿ' : 'Edit Farmer Profile'}</h3>
+                                            <p className="profile-edit-sub">
+                                                {lang === 'kn' 
+                                                    ? 'ನಿಮ್ಮ ಜಮೀನು ಮತ್ತು ಬೆಳೆಯ ವಿವರಗಳನ್ನು ಇಲ್ಲಿ ನವೀಕರಿಸಿ.' 
+                                                    : 'Update your registered farm and contact details.'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <button className="profile-edit-close" onClick={() => setIsEditingProfile(false)}>✕</button>
+                                </div>
+
+                                <form onSubmit={handleSaveProfile} className="profile-edit-form">
+                                    <div className="edit-form-grid">
+                                        <div className="edit-field">
+                                            <label>{t('phoneNumber', lang)}</label>
+                                            <input
+                                                type="tel"
+                                                value={editPhone}
+                                                onChange={e => setEditPhone(e.target.value)}
+                                                placeholder="10-digit mobile"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="edit-field">
+                                            <label>{t('surveyNumber', lang)}</label>
+                                            <input
+                                                type="text"
+                                                value={editSurvey}
+                                                onChange={e => setEditSurvey(e.target.value)}
+                                                placeholder="e.g. 108/A"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="edit-field">
+                                            <label>{t('acres', lang)}</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                value={editAcres}
+                                                onChange={e => setEditAcres(e.target.value)}
+                                                placeholder="Acres"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="edit-field">
+                                            <label>{t('guntas', lang)}</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                value={editGuntas}
+                                                onChange={e => setEditGuntas(e.target.value)}
+                                                placeholder="Guntas"
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="edit-field">
+                                            <label>{t('primaryCrop', lang)}</label>
+                                            <select
+                                                value={editPrimaryCrop}
+                                                onChange={e => setEditPrimaryCrop(e.target.value)}
+                                            >
+                                                {availableCrops.map(c => (
+                                                    <option key={c} value={c}>{getCropName(c, lang)}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="edit-field">
+                                            <label>{t('soilType', lang)}</label>
+                                            <select
+                                                value={editSoilType}
+                                                onChange={e => setEditSoilType(e.target.value)}
+                                            >
+                                                <option value="Laterite Soil">{getSoilName('Laterite Soil', lang)}</option>
+                                                <option value="Red Sandy Loam">{getSoilName('Red Sandy Loam', lang)}</option>
+                                                <option value="Coastal Alluvium">{getSoilName('Coastal Alluvium', lang)}</option>
+                                                <option value="Black Cotton Soil">{getSoilName('Black Cotton Soil', lang)}</option>
+                                                <option value="Clay Loam">{getSoilName('Clay Loam', lang)}</option>
+                                                <option value="Alluvial Soil">{getSoilName('Alluvial Soil', lang)}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="profile-edit-actions">
+                                        <button
+                                            type="button"
+                                            className="edit-cancel-btn"
+                                            onClick={() => setIsEditingProfile(false)}
+                                            disabled={savingProfile}
+                                        >
+                                            {lang === 'kn' ? 'ರದ್ದುಮಾಡಿ' : 'Cancel'}
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="edit-save-btn"
+                                            disabled={savingProfile}
+                                        >
+                                            {savingProfile 
+                                                ? <><span className="spinner"></span> {lang === 'kn' ? 'ಉಳಿಸಲಾಗುತ್ತಿದೆ...' : 'Saving...'}</> 
+                                                : `💾 ${lang === 'kn' ? 'ಉಳಿಸಿ' : 'Save Changes'}`}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        )}
+
+                        {/* Profile Info Cards Tri-Grid */}
+                        <div className="profile-tri-grid">
+                            {/* Card 1: Personal Information */}
+                            <div className="profile-info-box glass">
+                                <div className="profile-box-header">
+                                    <img className="box-header-icon profile-user-icon" src={profileUserIcon} alt="" />
+                                    <h4>{t('personalInfo', lang)}</h4>
+                                </div>
+                                <div className="profile-kv-list">
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('fullName', lang)}</span>
+                                        <span className="profile-v font-bold">{fn(registeredUser?.name || farmerHistory?.info?.name) || t('farmer', lang)}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('phoneNumber', lang)}</span>
+                                        <span className="profile-v">{registeredUser?.phone_number ? kd(registeredUser.phone_number) : (farmerHistory?.info?.phone ? kd(farmerHistory.info.phone) : t('notProvided', lang))}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('surveyNumber', lang)}</span>
+                                        <span className="profile-v chip-highlight">{kd(registeredUser?.survey_number || farmerHistory?.info?.survey_number || '108/A')}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('state', lang)}</span>
+                                        <span className="profile-v">{dn(registeredUser?.state || 'Karnataka')}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('district', lang)}</span>
+                                        <span className="profile-v">{dn(registeredUser?.district || farmerHistory?.info?.district || 'Dakshina Kannada')}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('taluk', lang)}</span>
+                                        <span className="profile-v">{tn(registeredUser?.taluk || farmerHistory?.info?.taluk || 'Mangaluru')}</span>
+                                    </div>
+                                    <div className="profile-kv-row">
+                                        <span className="profile-k">{t('hobli', lang)}</span>
+                                        <span className="profile-v">{tn(registeredUser?.hobli || farmerHistory?.info?.hobli || 'Kasaba')}</span>
+                                    </div>
+                                    <div className="profile-kv-row total-land-row">
+                                        <span className="profile-k">{t('totalLandArea', lang)}</span>
+                                        <span className="profile-v land-val">
+                                            {kd(registeredUser?.land_area_acres ?? farmerHistory?.info?.acres ?? 0)} {t('acres', lang)}, {kd(registeredUser?.land_area_guntas ?? farmerHistory?.info?.guntas ?? 0)} {t('guntas', lang)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 2: Previous Crop Grown */}
+                            <div className="profile-info-box glass">
+                                <div className="profile-box-header">
+                                    <span className="box-header-icon">🌱</span>
+                                    <h4>{t('previousCropsTitle', lang)}</h4>
+                                    {isRegistered && (
+                                        <button
+                                            type="button"
+                                            className="crop-history-add-btn"
+                                            onClick={() => openCropHistoryForm()}
+                                        >
+                                            {t('addCropHistory', lang)}
+                                        </button>
+                                    )}
+                                </div>
+                                {farmerHistory?.info?.previous_crops?.length ? (
+                                    <div className="chips-row">
+                                        {farmerHistory.info.previous_crops.map((crop: string) => (
+                                            <span key={crop} className="yield-mini-chip">
+                                                {getCropIcon(crop, '🌿')} {getCropName(crop, lang)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    cropHistoryRecords.length === 0 && (
+                                        <p className="spotlight-sec">{t('noPreviousCrops', lang)}</p>
+                                    )
+                                )}
+
+                                {cropHistoryError && (
+                                    <p className="crop-history-error" role="alert">{cropHistoryError}</p>
+                                )}
+
+                                {cropHistoryRecords.length > 0 && (
+                                    <div className="crop-history-preview">
+                                        {cropHistoryRecords.slice(0, 3).map(record => (
+                                            <article key={record.id} className="crop-history-record">
+                                                <div className="crop-history-record-main">
+                                                    <strong>{kd(record.year)} · {getCropName(record.crop_name, lang)}</strong>
+                                                    <span>{record.season} · {kd(record.cultivated_area_acres)} {t('acres', lang)} · {kd(record.yield_quantity)} {record.yield_unit}</span>
+                                                    <span>{getSoilName(record.soil_type, lang)} · pH {kd(record.soil_ph)} · {record.irrigation_type}</span>
+                                                    {record.profit !== null && (
+                                                        <span>₹{kd(record.profit.toLocaleString('en-IN'))} {t('cropHistoryProfit', lang).split(' (')[0]}</span>
+                                                    )}
+                                                </div>
+                                                {isRegistered && (
+                                                    <div className="crop-history-record-actions">
+                                                        <button type="button" onClick={() => openCropHistoryForm(record)}>{t('cropHistoryEdit', lang)}</button>
+                                                        <button type="button" onClick={() => handleDeleteCropHistory(record.id)}>{t('cropHistoryDelete', lang)}</button>
+                                                    </div>
+                                                )}
+                                            </article>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            className="crop-history-view-btn"
+                                            onClick={() => setActiveTab('history')}
+                                        >
+                                            {t('viewFullHistory', lang)}
+                                            {cropHistoryRecords.length > 3 && ` (${kd(cropHistoryRecords.length)})`}
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="profile-soil-specs">
+                                    <div className="soil-spec-item">
+                                        <span className="soil-spec-icon">🏔️</span>
+                                        <div>
+                                            <span className="spec-lbl">{t('soilType', lang)}</span>
+                                            <span className="spec-txt">{getSoilName(soilData?.soil_type || farmerHistory?.info?.soil_type || 'Laterite Soil', lang)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="soil-spec-item">
+                                        <span className="soil-spec-icon">🧪</span>
+                                        <div>
+                                            <span className="spec-lbl">{t('avgPH', lang)}</span>
+                                            <span className="spec-txt">{kd(farmerHistory?.info?.ph || soilData?.ph || '6.2')}</span>
+                                        </div>
+                                    </div>
+                                    <div className="soil-spec-item">
+                                        <span className="soil-spec-icon">⚖️</span>
+                                        <div>
+                                            <span className="spec-lbl">{t('estYield', lang)}</span>
+                                            <span className="spec-txt">
+                                                {farmerHistory?.history && farmerHistory.history.length > 0 
+                                                    ? `${kd(farmerHistory.history[farmerHistory.history.length - 1].yield)} ${fu(farmerHistory.history[farmerHistory.history.length - 1].unit || 'kg')}` 
+                                                    : `${kd('24.5')} ${fu('Quintals')}`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {farmerHistory?.history && farmerHistory.history.length > 0 && (
+                                    <div className="history-yield-strip">
+                                        <span className="strip-title">📅 {t('fiveYearCultivationYields', lang)}:</span>
+                                        <div className="chips-row">
+                                            {farmerHistory.history.map(item => (
+                                                <span key={item.year} className="yield-mini-chip">
+                                                    <strong>{kd(item.year)}:</strong> {kd(item.yield)} {fu(item.unit)}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Card 3: Financial Estimations */}
+                            <div className="profile-info-box glass">
+                                <div className="profile-box-header">
+                                    <span className="box-header-icon">📈</span>
+                                    <h4>{t('estimationsTitle', lang)}</h4>
+                                </div>
+                                {(() => {
+                                    const latest = farmerHistory?.history && farmerHistory.history.length > 0 
+                                        ? farmerHistory.history[farmerHistory.history.length - 1] 
+                                        : null;
+                                    const rev = latest?.revenue || 832472;
+                                    const cost = latest?.input_cost || 372378;
+                                    const profit = latest?.profit || 460094;
+                                    const ppa = latest?.profit_per_acre || 41080;
+                                    const margin = rev > 0 ? Math.round((profit / rev) * 100) : 55;
+
+                                    return (
+                                        <>
+                                            <div className="profile-finance-cards">
+                                                <div className="finance-card rev">
+                                                    <span className="finance-title">{t('estRevenue', lang)}</span>
+                                                    <span className="finance-amount">₹{kd(rev.toLocaleString('en-IN'))}</span>
+                                                    <span className="finance-footnote">{t('grossAnnualRevenue', lang)}</span>
+                                                </div>
+                                                <div className="finance-card cost">
+                                                    <span className="finance-title">{t('estInputCost', lang)}</span>
+                                                    <span className="finance-amount">₹{kd(cost.toLocaleString('en-IN'))}</span>
+                                                    <span className="finance-footnote">{t('farmOperationalCost', lang)}</span>
+                                                </div>
+                                                <div className="finance-card profit">
+                                                    <span className="finance-title">{t('estNetProfit', lang)}</span>
+                                                    <span className="finance-amount">₹{kd(profit.toLocaleString('en-IN'))}</span>
+                                                    <span className="finance-footnote">{t('estimatedNetReturns', lang)}</span>
+                                                </div>
+                                                <div className="finance-card ppa">
+                                                    <span className="finance-title">{t('estProfitPerAcre', lang)}</span>
+                                                    <span className="finance-amount">₹{kd(ppa.toLocaleString('en-IN'))}</span>
+                                                    <span className="finance-footnote">{lang === 'kn' ? `ಲಾಭದ ಪ್ರಮಾಣ: ~${kd(margin)}%` : `Margin: ~${margin}% ROI`}</span>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* ===== CROP RECOMMENDATION ===== */}
                 {activeTab === 'recommendation' && (
                     <div className="section-card">
@@ -1105,7 +1704,7 @@ function App() {
                                             border: '1.5px solid rgba(52, 211, 153, 0.20)',
                                             borderRadius: 'var(--radius-md)',
                                         }}>
-                                            <span style={{ fontSize: '2.5rem' }}>{cropEmojis[farmerHistory.info.primary_crop] || '🌿'}</span>
+                                            <span style={{ fontSize: '2.5rem' }}>{getCropIcon(farmerHistory.info.primary_crop, '🌿')}</span>
                                             <div>
                                                 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>
                                                     {t('activeCrop', lang)}
@@ -1144,22 +1743,22 @@ function App() {
                                 </div>
                                 <div className="weather-card">
                                     <div className="weather-header">
-                                        <h4>{t('liveWeather', lang)} — {weatherData?.location || registeredUser?.taluk}</h4>
-                                        {weatherData && (weatherData.source.includes('Open-Meteo') || weatherData.source === 'OpenWeatherMap API') && <span className="live-badge">● LIVE (Open-Meteo)</span>}
-                                        {weatherData?.source === 'fallback' && <span className="fallback-badge">{lang === 'kn' ? 'ಪ್ರಾದೇಶಿಕ ಡೀಫಾಲ್ಟ್' : 'Regional Defaults'}</span>}
+                                        <h4>{t('liveWeather', lang)} — {tn(weatherData?.location || registeredUser?.taluk || '')}</h4>
+                                        {weatherData && (weatherData.source.includes('Open-Meteo') || weatherData.source === 'OpenWeatherMap API') && <span className="live-badge">● {t('openMeteoLive', lang)}</span>}
+                                        {weatherData?.source === 'fallback' && <span className="fallback-badge">{t('regionalDefaults', lang)}</span>}
                                         <button className="refresh-weather-btn" onClick={() => fetchWeather(registeredUser?.taluk || 'Mangalore')} disabled={loadingWeather}>
                                             {loadingWeather ? '⏳' : '🔄'} {t('refresh', lang)}
                                         </button>
                                     </div>
                                     {loadingWeather ? (
-                                        <div className="weather-loading"><span className="spinner"></span> {lang === 'kn' ? 'ಹವಾಮಾನ ಮತ್ತು ಮಣ್ಣಿನ ಮಾಹಿತಿ ಪಡೆಯಲಾಗುತ್ತಿದೆ...' : 'Fetching climate & soil parameters...'}</div>
+                                        <div className="weather-loading"><span className="spinner"></span> {t('climateSoilLoading', lang)}</div>
                                     ) : weatherData ? (
                                         <div className="weather-grid-detailed">
                                             <div className="parameter-card">
                                                 <div className="parameter-icon">🌡️</div>
                                                 <div className="parameter-info">
                                                     <span className="parameter-label">{t('temperature', lang)}</span>
-                                                    <span className="parameter-value">{weatherData.temperature}°C</span>
+                                                    <span className="parameter-value">{kd(weatherData.temperature)}°C</span>
                                                     <span className="parameter-source">{weatherData.source}</span>
                                                 </div>
                                             </div>
@@ -1167,7 +1766,7 @@ function App() {
                                                 <div className="parameter-icon">💧</div>
                                                 <div className="parameter-info">
                                                     <span className="parameter-label">{t('humidity', lang)}</span>
-                                                    <span className="parameter-value">{weatherData.humidity}%</span>
+                                                    <span className="parameter-value">{kd(weatherData.humidity)}%</span>
                                                     <span className="parameter-source">{weatherData.source}</span>
                                                 </div>
                                             </div>
@@ -1175,8 +1774,8 @@ function App() {
                                                 <div className="parameter-icon">🌧️</div>
                                                 <div className="parameter-info">
                                                     <span className="parameter-label">{t('rainAnnual', lang)}</span>
-                                                    <span className="parameter-value">{weatherData.rainfall} mm</span>
-                                                    <span className="parameter-source">{lang === 'kn' ? 'ವಾರ್ಷಿಕ ಸರಾಸರಿ' : 'Annual Average'}</span>
+                                                    <span className="parameter-value">{kd(weatherData.rainfall)} {fu('mm')}</span>
+                                                    <span className="parameter-source">{t('annualAverage', lang)}</span>
                                                 </div>
                                             </div>
                                             {weatherData.rain_today !== undefined && (
@@ -1184,8 +1783,8 @@ function App() {
                                                     <div className="parameter-icon">☔</div>
                                                     <div className="parameter-info">
                                                         <span className="parameter-label">{t('rainToday', lang)}</span>
-                                                        <span className="parameter-value">{weatherData.rain_today} mm</span>
-                                                        <span className="parameter-source">Forecast</span>
+                                                        <span className="parameter-value">{kd(weatherData.rain_today)} {fu('mm')}</span>
+                                                        <span className="parameter-source">{t('forecast', lang)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1194,8 +1793,8 @@ function App() {
                                                     <div className="parameter-icon">🌦️</div>
                                                     <div className="parameter-info">
                                                         <span className="parameter-label">{t('rainCurrent', lang)}</span>
-                                                        <span className="parameter-value">{weatherData.rain_current} mm/h</span>
-                                                        <span className="parameter-source">Live hour</span>
+                                                        <span className="parameter-value">{kd(weatherData.rain_current)} {fu('mm/h')}</span>
+                                                        <span className="parameter-source">{t('liveHour', lang)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1205,8 +1804,8 @@ function App() {
                                                         <div className="parameter-icon">🧪</div>
                                                         <div className="parameter-info">
                                                             <span className="parameter-label">{t('avgPH', lang)}</span>
-                                                            <span className="parameter-value">{soilData.ph} pH</span>
-                                                            <span className="parameter-source">RTC Record</span>
+                                                            <span className="parameter-value">{kd(soilData.ph)} pH</span>
+                                                            <span className="parameter-source">{t('rtcRecord', lang)}</span>
                                                         </div>
                                                     </div>
                                                     <div className="parameter-card">
@@ -1216,7 +1815,7 @@ function App() {
                                                             <span className="parameter-value" style={{ fontSize: '0.9rem' }}>
                                                                 {getSoilName(soilData.soil_type, lang)}
                                                             </span>
-                                                            <span className="parameter-source">RTC Record</span>
+                                                            <span className="parameter-source">{t('rtcRecord', lang)}</span>
                                                         </div>
                                                     </div>
                                                 </>
@@ -1226,8 +1825,8 @@ function App() {
                                                     <div className="parameter-icon">🌡️</div>
                                                     <div className="parameter-info">
                                                         <span className="parameter-label">{t('soilTemp', lang)}</span>
-                                                        <span className="parameter-value">{soilData.temperature}°C</span>
-                                                        <span className="parameter-source">Open-Meteo 0-7cm</span>
+                                                        <span className="parameter-value">{kd(soilData.temperature)}°C</span>
+                                                        <span className="parameter-source">{t('openMeteo07', lang)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1236,8 +1835,8 @@ function App() {
                                                     <div className="parameter-icon">💦</div>
                                                     <div className="parameter-info">
                                                         <span className="parameter-label">{t('soilMoisture', lang)}</span>
-                                                        <span className="parameter-value">{soilData.moisture}%</span>
-                                                        <span className="parameter-source">Open-Meteo Volumetric</span>
+                                                        <span className="parameter-value">{kd(soilData.moisture)}%</span>
+                                                        <span className="parameter-source">{t('openMeteoVolumetric', lang)}</span>
                                                     </div>
                                                 </div>
                                             )}
@@ -1270,20 +1869,13 @@ function App() {
                                     <h3>{t('recommendedCropsTitle', lang)}</h3>
                                     <button className="back-btn" onClick={resetCropResults}>{t('backBtn', lang)}</button>
                                 </div>
-                                <div className="soil-info">
-                                    <div className="info-chip">🧪 pH: {recommendations?.soil_data?.ph}</div>
-                                    <div className="info-chip">🌡️ Temp: {recommendations?.soil_data?.temp}°C</div>
-                                    <div className="info-chip">🌧️ Rainfall: {recommendations?.soil_data?.rainfall}mm</div>
-                                    <div className="info-chip">🏔️ {recommendations?.soil_data?.soil_type}</div>
-                                    {recommendations?.soil_data?.humidity && <div className="info-chip">💧 Humidity: {recommendations?.soil_data?.humidity}%</div>}
-                                </div>
                                 {recommendations?.soil_data?.weather_source === 'OpenWeatherMap API' && (
-                                    <p className="weather-source-note">📡 Weather data sourced live from OpenWeatherMap for {weatherData?.location}</p>
+                                    <p className="weather-source-note">📡 {lang === 'kn' ? 'ಲೈವ್ ಹವಾಮಾನ ಮಾಹಿತಿ' : 'Weather data sourced live from OpenWeatherMap for'} {dn(weatherData?.location || '')}</p>
                                 )}
                                 <div className="crop-grid">
                                     {recommendations?.recommended_crops.map((item: any, index: number) => {
                                         const cropName = typeof item === 'string' ? item : item.crop;
-                                        const cropPrice = typeof item === 'string' ? 'Check Market' : (item.price_range || item.price);
+                                        const cropPrice = typeof item === 'string' ? t('checkMarket', lang) : (item.price_range || item.price);
                                         const trend = typeof item === 'string' ? 'stable' : item.trend;
                                         const varietiesList = item.varieties || [];
                                         const isExpanded = expandedSpeciesCrop === cropName;
@@ -1291,7 +1883,7 @@ function App() {
                                         return (
                                             <div key={cropName} className={`crop-card ${isExpanded ? 'crop-card-expanded' : ''}`} style={{ animationDelay: `${index * 0.1}s` }}>
                                                 <div className="crop-card-header">
-                                                    <span className="crop-icon">{cropEmojis[cropName] || '🌿'}</span>
+                                                    <span className="crop-icon">{getCropIcon(cropName, '🌿')}</span>
                                                     <span className={`trend ${trend}`}>
                                                         {trend === 'up' ? t('trendRising', lang) : trend === 'down' ? t('trendFalling', lang) : t('trendStable', lang)}
                                                     </span>
@@ -1300,14 +1892,14 @@ function App() {
                                                 {item.botanical_genus && (
                                                     <span className="crop-genus-tag">{item.botanical_genus}</span>
                                                 )}
-                                                <p className="crop-price">{cropPrice === 'Check Market' ? t('checkMarket', lang) : cropPrice}</p>
+                                                <p className="crop-price">{cropPrice === 'Check Market' ? t('checkMarket', lang) : kd(cropPrice)}</p>
                                                 
                                                 {/* Best Variety Recommendation Box */}
                                                 {item.best_variety && (
-                                                    <div className="card-best-variety-badge" onClick={() => openVarietyModal(cropName)} title="Click to view cultivar details">
+                                                    <div className="card-best-variety-badge" onClick={() => openVarietyModal(cropName)} title={t('clickToViewCultivar', lang)}>
                                                         <div className="best-var-text">
                                                             <span className="best-var-label">{t('bestForYourLand', lang)}</span>
-                                                            <strong>{item.best_variety.name} • {item.best_variety.suitability_score}% Match</strong>
+                                                            <strong>{item.best_variety.name} • {kd(item.best_variety.suitability_score)}% {t('match', lang)}</strong>
                                                         </div>
                                                     </div>
                                                 )}
@@ -1319,38 +1911,13 @@ function App() {
                                                         <div className="strip-chips">
                                                             {item.top_varieties.map((tv: CropVariety) => (
                                                                 <span key={tv.name} className="mini-variety-pill" onClick={() => openVarietyModal(cropName)}>
-                                                                    {tv.name} <small>{tv.suitability_score}%</small>
+                                                                    {tv.name} <small>{kd(tv.suitability_score)}%</small>
                                                                 </span>
                                                             ))}
                                                         </div>
                                                     </div>
                                                 )}
                                                 
-                                                {/* Cross-reference with Neighbours' Farming Results */}
-                                                {(() => {
-                                                    const nbMatch = neighbourData?.crop_summary?.find(cs => cs.crop.toLowerCase() === cropName.toLowerCase());
-                                                    return (
-                                                        <div 
-                                                            className={`card-neighbour-benchmark ${nbMatch ? 'has-farmers' : 'opportunity'}`}
-                                                            onClick={() => {
-                                                                if (nbMatch) setSelectedCropFilter(cropName);
-                                                                setActiveTab('neighbours');
-                                                            }}
-                                                            title={nbMatch ? "Compare this recommendation with neighbours' farming results" : "Untapped local opportunity in your taluk"}
-                                                        >
-                                                            <span className="nb-benchmark-icon">🏘️</span>
-                                                            <span className="nb-benchmark-text">
-                                                                {nbMatch ? (
-                                                                    <><strong>{nbMatch.farmer_count} {t('farmersGrowing', lang)}</strong> • Avg {nbMatch.avg_yield_per_acre} {nbMatch.yield_unit}/acre</>
-                                                                ) : (
-                                                                    <>{t('nicheOpportunity', lang)}</>
-                                                                )}
-                                                            </span>
-                                                            <span className="nb-benchmark-action">{t('viewInNeighbours', lang)} →</span>
-                                                        </div>
-                                                    );
-                                                })()}
-
                                                 {varietiesList.length > 0 && (
                                                     <div className="card-species-actions">
                                                         <div className="species-actions-buttons">
@@ -1359,7 +1926,7 @@ function App() {
                                                                 className="species-toggle-btn"
                                                                 onClick={() => setExpandedSpeciesCrop(isExpanded ? null : cropName)}
                                                             >
-                                                                {isExpanded ? t('hideSpecies', lang) : `${t('viewSpecies', lang)} (${varietiesList.length})`}
+                                                                {isExpanded ? t('hideSpecies', lang) : `${t('viewSpecies', lang)} (${kd(varietiesList.length)})`}
                                                             </button>
                                                             <button
                                                                 type="button"
@@ -1378,7 +1945,7 @@ function App() {
                                                         <div className="drawer-header-row">
                                                             <div>
                                                                 <h6>{t('cropSpeciesTitle', lang)}</h6>
-                                                                <span className="drawer-crop-subtitle">{varietiesList.length} verified cultivars for this zone</span>
+                                                                <span className="drawer-crop-subtitle">{varietiesList.length} {lang === 'kn' ? 'ದೃಢೀಕರಿಸಿದ ತಳಿಗಳು' : 'verified cultivars for this zone'}</span>
                                                             </div>
                                                             <button
                                                                 type="button"
@@ -1395,14 +1962,25 @@ function App() {
                                                                     <div className="drawer-variety-top">
                                                                         <div className="drawer-thumb-wrap">
                                                                             <img
-                                                                                src={v.image_url || item.crop_image || 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=300&q=80'}
-                                                                                alt={v.name}
+                                                                                src={v.image_url || item.crop_image}
+                                                                                alt={`${getCropName(cropName, lang)} - ${v.name}`}
                                                                                 className="drawer-variety-img"
-                                                                                onError={(e: any) => {
-                                                                                    e.target.onerror = null;
-                                                                                    e.target.src = 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=300&q=80';
+                                                                                onError={(event) => {
+                                                                                    event.currentTarget.style.display = 'none';
                                                                                 }}
                                                                             />
+                                                                            {v.image_credit && v.image_source && (
+                                                                                <a
+                                                                                    className="variety-image-credit"
+                                                                                    href={v.image_source}
+                                                                                    target="_blank"
+                                                                                    rel="noreferrer"
+                                                                                    aria-label={`Photo credit: ${v.image_credit}`}
+                                                                                    title={v.image_credit}
+                                                                                >
+                                                                                    {v.image_credit}
+                                                                                </a>
+                                                                            )}
                                                                         </div>
                                                                         <div className="drawer-variety-info-head">
                                                                             <div className="drawer-name-row">
@@ -1415,7 +1993,7 @@ function App() {
                                                                             {v.suitability_score !== undefined && (
                                                                                 <div className="drawer-suitability-line">
                                                                                     <span className="suitability-chip">
-                                                                                        {v.suitability_score}% match
+                                                                                        {v.suitability_score}% {t('match', lang)}
                                                                                     </span>
                                                                                     <div className="suitability-progress-track">
                                                                                         <div className="suitability-progress-bar" style={{ width: `${v.suitability_score}%` }}></div>
@@ -1424,7 +2002,6 @@ function App() {
                                                                             )}
                                                                         </div>
                                                                     </div>
-
                                                                     {/* Match highlights */}
                                                                     {v.match_highlights && v.match_highlights.length > 0 && (
                                                                         <div className="drawer-match-reasons">
@@ -1437,23 +2014,23 @@ function App() {
                                                                     {/* Agronomic Specifications Grid */}
                                                                     <div className="drawer-specs-grid">
                                                                         <div className="drawer-spec-cell">
-                                                                            <span className="cell-label">Soil & pH:</span>
+                                                                            <span className="cell-label">{t('soilAndPH', lang)}:</span>
                                                                             <span className="cell-value">{v.soil_type || 'Loamy'} {v.soil_ph_range ? `(pH ${v.soil_ph_range[0]}-${v.soil_ph_range[1]})` : ''}</span>
                                                                         </div>
                                                                         <div className="drawer-spec-cell">
-                                                                            <span className="cell-label">Climate:</span>
+                                                                            <span className="cell-label">{t('climate', lang)}:</span>
                                                                             <span className="cell-value">{v.min_temp}°C - {v.max_temp}°C | {v.rainfall_range?.[0]}-{v.rainfall_range?.[1]}mm</span>
                                                                         </div>
                                                                         <div className="drawer-spec-cell">
-                                                                            <span className="cell-label">Season:</span>
+                                                                            <span className="cell-label">{t('season', lang)}:</span>
                                                                             <span className="cell-value">{v.growing_months || v.season}</span>
                                                                         </div>
                                                                         <div className="drawer-spec-cell">
-                                                                            <span className="cell-label">Maturity:</span>
-                                                                            <span className="cell-value">{v.maturity_period || `${v.duration_days} days`}</span>
+                                                                            <span className="cell-label">{t('maturity', lang)}:</span>
+                                                                            <span className="cell-value">{v.maturity_period || `${v.duration_days} ${t('days', lang)}`}</span>
                                                                         </div>
                                                                         <div className="drawer-spec-cell">
-                                                                            <span className="cell-label">Yield:</span>
+                                                                            <span className="cell-label">{t('yield', lang)}:</span>
                                                                             <span className="cell-value highlight-cell">{v.expected_yield || `${v.yield_per_acre} ${item.unit || 'q'}/acre`}</span>
                                                                         </div>
                                                                     </div>
@@ -1508,12 +2085,12 @@ function App() {
                     <div className="section-card">
                         {!showMarketResult ? (
                             <>
-                                <h3>📊 Market Rate Prediction</h3>
-                                <p className="section-description">View live APMC market prices from data.gov.in for any Karnataka district. Select your district to see today's commodity prices.</p>
+                                <h3>{t('marketRatesTitle', lang)}</h3>
+                                <p className="section-description">{t('marketRatesDesc', lang)}</p>
 
                                 {/* District Selector */}
                                 <div className="district-selector">
-                                    <label htmlFor="district-select">📍 Select District</label>
+                                    <label htmlFor="district-select">{t('selectKarnatakaDistrict', lang)}</label>
                                     <div className="district-select-row">
                                         <select
                                             id="district-select"
@@ -1523,55 +2100,55 @@ function App() {
                                                 fetchLiveMarketPrices(e.target.value);
                                             }}
                                         >
-                                            <option value="">All Karnataka</option>
+                                            <option value="">{t('allKarnataka', lang)}</option>
                                             {getDistrictsForState(registeredUser?.state || 'Karnataka').map(d => (
-                                                <option key={d} value={d}>{d}</option>
+                                                <option key={d} value={d}>{dn(d)}</option>
                                             ))}
                                         </select>
                                         {selectedDistrict === registeredUser?.district && (
-                                            <span className="your-district-badge">📍 Your District</span>
+                                            <span className="your-district-badge">{t('yourDistrict', lang)}</span>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Live Market Prices Table */}
                                 {loadingLiveMarket && (
-                                    <div className="weather-loading"><span className="spinner"></span> Fetching live market prices...</div>
+                                    <div className="weather-loading"><span className="spinner"></span> {t('fetchingLiveMarket', lang)}</div>
                                 )}
 
                                 {!loadingLiveMarket && liveMarketData && liveMarketData.records.length > 0 && (
                                     <div className="live-market-section">
                                         <div className="live-market-header">
-                                            <h4>🏪 Live APMC Market Prices — {liveMarketData.requested_district || 'All Karnataka'}</h4>
+                                            <h4>🏪 {t('liveAPMCTable', lang)} — {dn(liveMarketData.requested_district || '') || t('allKarnataka', lang)}</h4>
                                             <div className="live-market-meta">
-                                                <span className="live-badge">● LIVE</span>
-                                                <span className="data-source-badge">Source: data.gov.in</span>
-                                                <span className="record-count">{liveMarketData.total} commodities</span>
+                                                <span className="live-badge">● {t('liveBadge', lang)}</span>
+                                                <span className="data-source-badge">{t('dataSourceGov', lang)}</span>
+                                                <span className="record-count">{kd(liveMarketData.total)} {t('commoditiesCount', lang)}</span>
                                             </div>
                                         </div>
                                         <div className="live-table-wrapper">
                                             <table className="live-market-table">
                                                 <thead>
                                                     <tr>
-                                                        <th>Market (APMC)</th>
-                                                        <th>Commodity</th>
-                                                        <th>Variety</th>
-                                                        <th className="price-th">Min Price</th>
-                                                        <th className="price-th">Max Price</th>
-                                                        <th className="price-th modal-th">Modal Price</th>
-                                                        <th>Date</th>
+                                                        <th>{t('apmcMarket', lang)}</th>
+                                                        <th>{t('commodity', lang)}</th>
+                                                        <th>{t('variety', lang)}</th>
+                                                        <th className="price-th">{t('minPrice', lang)}</th>
+                                                        <th className="price-th">{t('maxPrice', lang)}</th>
+                                                        <th className="price-th modal-th">{t('modalPrice', lang)}</th>
+                                                        <th>{t('date', lang)}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     {liveMarketData.records.map((rec, idx) => (
                                                         <tr key={`${rec.market}-${rec.commodity}-${idx}`} className="live-row">
-                                                            <td className="market-name-cell">{rec.market}</td>
-                                                            <td className="commodity-cell">{rec.commodity}</td>
+                                                            <td className="market-name-cell">{tn(rec.market)}</td>
+                                                            <td className="commodity-cell">{getCropName(rec.commodity, lang)}</td>
                                                             <td className="variety-cell">{rec.variety}</td>
-                                                            <td className="price-cell min">₹{Number(rec.min_price).toLocaleString('en-IN')}</td>
-                                                            <td className="price-cell max">₹{Number(rec.max_price).toLocaleString('en-IN')}</td>
-                                                            <td className="price-cell modal">₹{Number(rec.modal_price).toLocaleString('en-IN')}</td>
-                                                            <td className="date-cell">{rec.arrival_date}</td>
+                                                            <td className="price-cell min">₹{kd(Number(rec.min_price).toLocaleString('en-IN'))}</td>
+                                                            <td className="price-cell max">₹{kd(Number(rec.max_price).toLocaleString('en-IN'))}</td>
+                                                            <td className="price-cell modal">₹{kd(Number(rec.modal_price).toLocaleString('en-IN'))}</td>
+                                                            <td className="date-cell">{kd(rec.arrival_date)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -1583,61 +2160,61 @@ function App() {
                                 {!loadingLiveMarket && liveMarketData && liveMarketData.records.length === 0 && (
                                     <div className="no-data-card">
                                         <span className="no-data-icon">📭</span>
-                                        <h4>No Market Data Available Today</h4>
-                                        <p>No APMC price data was reported for <strong>{selectedDistrict || 'Karnataka'}</strong> today. Try selecting a different district or check back tomorrow.</p>
+                                        <h4>{t('noMarketDataToday', lang)}</h4>
+                                        <p>{t('noMarketDataDesc', lang)}</p>
                                     </div>
                                 )}
 
                                 {/* Crop Selection */}
-                                <h4 className="select-crop-title">🔍 Select a Crop for Detailed Prediction</h4>
+                                <h4 className="select-crop-title">{t('selectCropDetailed', lang)}</h4>
                                 <form onSubmit={handleMarketPrediction} className="input-form">
                                     <div className="crop-select-grid">
                                         {availableCrops.map(crop => (
                                             <div key={crop} className={`crop-select-card ${selectedCrop === crop ? 'selected' : ''}`} onClick={() => setSelectedCrop(crop)}>
-                                                <span className="crop-select-icon">{cropEmojis[crop] || '🌿'}</span>
+                                                <span className="crop-select-icon">{getCropIcon(crop, '🌿')}</span>
                                                 <span className="crop-select-name">{getCropName(crop, lang)}</span>
                                                 {selectedCrop === crop && <span className="check-mark">✓</span>}
                                             </div>
                                         ))}
                                     </div>
                                     <button type="submit" className="submit-btn" disabled={!selectedCrop || loadingMarket}>
-                                        {loadingMarket ? <><span className="spinner"></span> Fetching...</> : t('getMarketRateBtn', lang)}
+                                        {loadingMarket ? <><span className="spinner"></span> {t('calculating', lang)}</> : t('getMarketRateBtn', lang)}
                                     </button>
                                 </form>
                             </>
                         ) : (
                             <>
                                 <div className="result-header">
-                                    <h3>💰 Market Rate Prediction</h3>
-                                    <button className="back-btn" onClick={resetMarketForm}>← Select Another Crop</button>
+                                    <h3>💰 {t('marketRatesTitle', lang)}</h3>
+                                    <button className="back-btn" onClick={resetMarketForm}>{t('selectAnotherCrop', lang)}</button>
                                 </div>
 
                                 {selectedMarketResult && (
                                     <div className="market-result-card">
                                         <div className="market-result-main">
                                             <div className="market-crop-name">
-                                                <span className="market-crop-emoji">{cropEmojis[selectedMarketResult.crop] || '🌿'}</span>
-                                                <h2>{selectedMarketResult.crop}</h2>
+                                                <span className="market-crop-emoji">{getCropIcon(selectedMarketResult.crop, '🌿')}</span>
+                                                <h2>{getCropName(selectedMarketResult.crop, lang)}</h2>
                                             </div>
                                             <div className="market-price-display">
-                                                <span className="market-price-label">Current Market Rate</span>
-                                                <span className="market-price-value">{selectedMarketResult.price}</span>
+                                                <span className="market-price-label">{t('currentMarketRate', lang)}</span>
+                                                <span className="market-price-value">{kd(selectedMarketResult.price)}</span>
                                                 <span className={`market-trend ${selectedMarketResult.trend}`}>
-                                                    {selectedMarketResult.trend === 'up' ? '📈 Price Trending Up'
-                                                        : selectedMarketResult.trend === 'down' ? '📉 Price Trending Down'
-                                                            : '📊 Price Stable'}
+                                                    {selectedMarketResult.trend === 'up' ? `📈 ${t('priceTrendingUp', lang)}`
+                                                        : selectedMarketResult.trend === 'down' ? `📉 ${t('priceTrendingDown', lang)}`
+                                                            : `📊 ${t('priceStable', lang)}`}
                                                 </span>
                                             </div>
                                         </div>
                                         <div className="market-advice">
                                             {selectedMarketResult.trend === 'up' && (
-                                                <p className="advice-text up">✅ <strong>Good time to sell!</strong> The market price for {selectedMarketResult.crop} is trending upward.</p>
+                                                <p className="advice-text up">✅ <strong>{t('goodTimeToSellNotice', lang)}</strong></p>
                                             )}
                                             {selectedMarketResult.trend === 'down' && (
-                                                <p className="advice-text down">⚠️ <strong>Consider holding.</strong> The market price for {selectedMarketResult.crop} is declining.</p>
+                                                <p className="advice-text down">⚠️ <strong>{t('considerHoldingNotice', lang)}</strong></p>
                                             )}
                                             {selectedMarketResult.trend === 'stable' && (
-                                                <p className="advice-text stable">ℹ️ <strong>Market is stable.</strong> You can sell at your convenience.</p>
+                                                <p className="advice-text stable">ℹ️ <strong>{t('marketStableNotice', lang)}</strong></p>
                                             )}
                                         </div>
                                     </div>
@@ -1651,18 +2228,18 @@ function App() {
                                                 <h4>{getCropName(selectedMarketResult.crop, lang)} — {t('cropSpeciesTitle', lang)}</h4>
                                                 <p className="species-section-subtitle">
                                                     {speciesDataMap[selectedMarketResult.crop]?.botanical_genus && (
-                                                        <span><strong>Botanical Genus:</strong> <em>{speciesDataMap[selectedMarketResult.crop]?.botanical_genus}</em> • </span>
+                                                        <span><strong>{t('botanicalGenus', lang)}:</strong> <em>{speciesDataMap[selectedMarketResult.crop]?.botanical_genus}</em> • </span>
                                                     )}
-                                                    <span>{speciesDataMap[selectedMarketResult.crop]?.varieties_count || 0} {t('varietiesAvailable', lang)}</span>
+                                                    <span>{kd(speciesDataMap[selectedMarketResult.crop]?.varieties_count || 0)} {t('varietiesAvailable', lang)}</span>
                                                     {speciesDataMap[selectedMarketResult.crop]?.price_range && (
-                                                        <span> • {t('priceRangeLabel', lang)}: <strong className="range-highlight">{speciesDataMap[selectedMarketResult.crop]?.price_range?.display}</strong></span>
+                                                        <span> • {t('priceRangeLabel', lang)}: <strong className="range-highlight">{kd(speciesDataMap[selectedMarketResult.crop]?.price_range?.display)}</strong></span>
                                                     )}
                                                 </p>
                                             </div>
                                         </div>
 
                                         {loadingSpeciesCrop === selectedMarketResult.crop ? (
-                                            <div className="weather-loading"><span className="spinner"></span> Loading species varieties & prices...</div>
+                                            <div className="weather-loading"><span className="spinner"></span> {t('loadingSpecies', lang)}</div>
                                         ) : (
                                             <div className="species-grid">
                                                 {(speciesDataMap[selectedMarketResult.crop]?.varieties || []).map((v, vIdx) => {
@@ -1672,21 +2249,31 @@ function App() {
                                                             {/* Variety Photo */}
                                                             <div className="species-card-img-wrap">
                                                                 <img
-                                                                    src={v.image_url || speciesDataMap[selectedMarketResult.crop]?.crop_image || 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=350&q=80'}
-                                                                    alt={v.name}
+                                                                    src={v.image_url || speciesDataMap[selectedMarketResult.crop]?.crop_image || ''}
+                                                                    alt={`${getCropName(selectedMarketResult.crop, lang)} - ${v.name}`}
                                                                     className="species-thumb-img"
-                                                                    onError={(e: any) => {
-                                                                        e.target.onerror = null;
-                                                                        e.target.src = 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=350&q=80';
+                                                                    onError={(event) => {
+                                                                        event.currentTarget.style.display = 'none';
                                                                     }}
                                                                 />
+                                                                {v.image_credit && v.image_source && (
+                                                                    <a
+                                                                        className="variety-image-credit"
+                                                                        href={v.image_source}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        aria-label={`Photo credit: ${v.image_credit}`}
+                                                                        title={v.image_credit}
+                                                                    >
+                                                                        {v.image_credit}
+                                                                    </a>
+                                                                )}
                                                                 {v.suitability_score !== undefined && (
                                                                     <span className="species-card-match-pill">
-                                                                        {v.suitability_score}% match
+                                                                        {v.suitability_score}% {t('match', lang)}
                                                                     </span>
                                                                 )}
                                                             </div>
-
                                                             <div className="species-card-top">
                                                                 <div className="species-name-group">
                                                                     <span className="species-index-pill">#{vIdx + 1}</span>
@@ -1703,10 +2290,10 @@ function App() {
 
                                                             {/* Agronomic Quick Specs */}
                                                             <div className="species-agri-specs">
-                                                                <div className="spec-mini-tag"><strong>Soil:</strong> {v.soil_type ? v.soil_type.split(',')[0] : 'Alluvial/Loam'} {v.soil_ph_range ? `(pH ${v.soil_ph_range[0]}-${v.soil_ph_range[1]})` : ''}</div>
-                                                                <div className="spec-mini-tag"><strong>Climate:</strong> {v.min_temp}°C - {v.max_temp}°C | {v.rainfall_range?.[0]}-{v.rainfall_range?.[1]}mm</div>
-                                                                <div className="spec-mini-tag"><strong>Maturity:</strong> {v.maturity_period || `${v.duration_days} days`}</div>
-                                                                <div className="spec-mini-tag"><strong>Yield:</strong> {v.expected_yield || `${v.yield_per_acre} ${speciesDataMap[selectedMarketResult.crop]?.unit || 'q'}/acre`}</div>
+                                                                <div className="spec-mini-tag"><strong>{t('soilAndPH', lang)}:</strong> {v.soil_type ? v.soil_type.split(',')[0] : 'Alluvial/Loam'} {v.soil_ph_range ? `(pH ${v.soil_ph_range[0]}-${v.soil_ph_range[1]})` : ''}</div>
+                                                                <div className="spec-mini-tag"><strong>{t('climate', lang)}:</strong> {v.min_temp}°C - {v.max_temp}°C | {v.rainfall_range?.[0]}-{v.rainfall_range?.[1]}mm</div>
+                                                                <div className="spec-mini-tag"><strong>{t('maturity', lang)}:</strong> {v.maturity_period || `${v.duration_days} ${t('days', lang)}`}</div>
+                                                                <div className="spec-mini-tag"><strong>{t('yield', lang)}:</strong> {v.expected_yield || `${v.yield_per_acre} ${speciesDataMap[selectedMarketResult.crop]?.unit || 'q'}/acre`}</div>
                                                             </div>
 
                                                             {v.characteristics && (
@@ -1723,7 +2310,7 @@ function App() {
                                                                         if (formEl) formEl.scrollIntoView({ behavior: 'smooth' });
                                                                     }}
                                                                 >
-                                                                    {isSelectedVar ? 'Selected' : t('selectVarietyForProfit', lang)}
+                                                                    {isSelectedVar ? t('selected', lang) : t('selectVarietyForProfit', lang)}
                                                                 </button>
                                                                 <button
                                                                     type="button"
@@ -1743,12 +2330,12 @@ function App() {
 
                                 {/* Profit Calculator */}
                                 <div className="profit-calculator" id="profit-estimator-box">
-                                    <h4>📐 Profit Estimator — Enter Your Land Details</h4>
-                                    <p className="profit-desc">Enter your land area to estimate crop yield, input costs, and net profit based on selected species and market rates.</p>
+                                    <h4>{t('profitCalcTitle', lang)}</h4>
+                                    <p className="profit-desc">{t('profitCalcDesc', lang)}</p>
                                     <form onSubmit={handleProfitEstimate} className="profit-form">
                                         <div className="form-group">
-                                            <label>Survey Number</label>
-                                            <input type="text" value={calcSurveyNumber} onChange={(e) => setCalcSurveyNumber(e.target.value)} placeholder={registeredUser?.survey_number || 'e.g. 120/3'} className="form-input" />
+                                            <label>{t('surveyNumber', lang)}</label>
+                                            <input type="text" value={calcSurveyNumber} onChange={(e) => setCalcSurveyNumber(e.target.value)} placeholder={registeredUser?.survey_number || t('profitSurveyPlaceholder', lang)} className="form-input" />
                                         </div>
 
                                         {/* Variety / Species Selector */}
@@ -1759,32 +2346,32 @@ function App() {
                                                 onChange={(e) => setSelectedVariety(e.target.value)}
                                                 className="form-input variety-dropdown"
                                             >
-                                                <option value="">-- {t('defaultVarietyOption', lang)} ({selectedMarketResult?.crop || selectedCrop}) --</option>
+                                                <option value="">-- {t('defaultVarietyOption', lang)} ({getCropName(selectedMarketResult?.crop || selectedCrop, lang)}) --</option>
                                                 {(speciesDataMap[selectedMarketResult?.crop || selectedCrop]?.varieties || []).map((v) => (
                                                     <option key={v.name} value={v.name}>
-                                                        {v.name} — {v.price_display || `₹${v.price}/${speciesDataMap[selectedMarketResult?.crop || selectedCrop]?.unit}`} ({v.duration_days} days, {v.yield_per_acre} {speciesDataMap[selectedMarketResult?.crop || selectedCrop]?.unit}/acre)
+                                                        {v.name} — {v.price_display || `₹${v.price}/${speciesDataMap[selectedMarketResult?.crop || selectedCrop]?.unit}`} ({v.duration_days} {t('days', lang)}, {v.yield_per_acre} {speciesDataMap[selectedMarketResult?.crop || selectedCrop]?.unit}/acre)
                                                     </option>
                                                 ))}
                                             </select>
                                             {selectedVariety && (
                                                 <div className="variety-selection-notice">
-                                                    🎯 Profit estimate will use specific cultivar rate: <strong>{selectedVariety}</strong>
+                                                    🎯 {t('profitEstimationBanner', lang)} <strong>{selectedVariety}</strong>
                                                 </div>
                                             )}
                                         </div>
 
                                         <div className="form-row">
                                             <div className="form-group">
-                                                <label>Acres</label>
-                                                <input type="number" value={calcAcres} onChange={(e) => setCalcAcres(e.target.value)} placeholder={String(registeredUser?.land_area_acres ?? 0)} className="form-input" />
+                                                <label>{t('acres', lang)}</label>
+                                                <input type="number" value={calcAcres} onChange={(e) => setCalcAcres(e.target.value)} placeholder={kd(registeredUser?.land_area_acres ?? 0)} className="form-input" />
                                             </div>
                                             <div className="form-group">
-                                                <label>Guntas</label>
-                                                <input type="number" value={calcGuntas} onChange={(e) => setCalcGuntas(e.target.value)} placeholder={String(registeredUser?.land_area_guntas ?? 0)} className="form-input" />
+                                                <label>{t('guntas', lang)}</label>
+                                                <input type="number" value={calcGuntas} onChange={(e) => setCalcGuntas(e.target.value)} placeholder={kd(registeredUser?.land_area_guntas ?? 0)} className="form-input" />
                                             </div>
                                         </div>
                                         <button type="submit" className="profit-btn" disabled={loadingProfit}>
-                                            {loadingProfit ? <><span className="spinner"></span> Calculating...</> : '📊 Calculate Estimated Profit'}
+                                            {loadingProfit ? <><span className="spinner"></span> {t('calculating', lang)}</> : `📊 ${t('calculateProfitBtn', lang)}`}
                                         </button>
                                     </form>
                                 </div>
@@ -1792,7 +2379,7 @@ function App() {
                                 {/* Profit Results */}
                                 {showProfitCalc && profitEstimate && (
                                     <div className="profit-result">
-                                        <h4>💹 Profit Estimation — {profitEstimate.crop}</h4>
+                                        <h4>💹 {t('profitCalcTitle', lang)} — {getCropName(profitEstimate.crop, lang)}</h4>
 
                                         {profitEstimate.variety && (
                                             <div className="variety-result-banner">
@@ -1807,42 +2394,42 @@ function App() {
                                                     </div>
                                                 </div>
                                                 <div className="variety-banner-right">
-                                                    <span className="variety-banner-price-tag">{profitEstimate.price_display}</span>
-                                                    <span className="variety-banner-sub">Yield: {profitEstimate.yield_per_acre} {profitEstimate.yield_unit}/acre</span>
+                                                    <span className="variety-banner-price-tag">{kd(profitEstimate.price_display)}</span>
+                                                    <span className="variety-banner-sub">{t('yield', lang)}: {kd(profitEstimate.yield_per_acre)} {fu(profitEstimate.yield_unit)}/{t('perAcreUnit', lang)}</span>
                                                 </div>
                                             </div>
                                         )}
                                         <div className="profit-grid">
                                             <div className="profit-card yield">
                                                 <span className="profit-card-icon">📦</span>
-                                                <span className="profit-card-label">Est. Yield</span>
-                                                <span className="profit-card-value">{profitEstimate.estimated_total_yield} {profitEstimate.yield_unit}</span>
-                                                <span className="profit-card-sub">{profitEstimate.yield_per_acre}/{profitEstimate.yield_unit} per acre</span>
+                                                <span className="profit-card-label">{t('estYield', lang)}</span>
+                                                <span className="profit-card-value">{kd(profitEstimate.estimated_total_yield)} {fu(profitEstimate.yield_unit)}</span>
+                                                <span className="profit-card-sub">{kd(profitEstimate.yield_per_acre)}/{fu(profitEstimate.yield_unit)} {t('perAcreUnit', lang)}</span>
                                             </div>
                                             <div className="profit-card revenue">
                                                 <span className="profit-card-icon">💰</span>
-                                                <span className="profit-card-label">Est. Revenue</span>
-                                                <span className="profit-card-value">₹{profitEstimate.estimated_revenue.toLocaleString('en-IN')}</span>
-                                                <span className="profit-card-sub">@ {profitEstimate.price_display}</span>
+                                                <span className="profit-card-label">{t('estRevenue', lang)}</span>
+                                                <span className="profit-card-value">₹{kd(profitEstimate.estimated_revenue.toLocaleString('en-IN'))}</span>
+                                                <span className="profit-card-sub">@ {kd(profitEstimate.price_display)}</span>
                                             </div>
                                             <div className="profit-card cost">
                                                 <span className="profit-card-icon">📋</span>
-                                                <span className="profit-card-label">Est. Input Cost</span>
-                                                <span className="profit-card-value">₹{profitEstimate.estimated_input_cost.toLocaleString('en-IN')}</span>
-                                                <span className="profit-card-sub">~40% of revenue</span>
+                                                <span className="profit-card-label">{t('estInputCost', lang)}</span>
+                                                <span className="profit-card-value">₹{kd(profitEstimate.estimated_input_cost.toLocaleString('en-IN'))}</span>
+                                                <span className="profit-card-sub">{t('ofRevenueSub', lang)}</span>
                                             </div>
                                             <div className="profit-card profit">
                                                 <span className="profit-card-icon">✨</span>
-                                                <span className="profit-card-label">Est. Net Profit</span>
-                                                <span className="profit-card-value highlight">₹{profitEstimate.estimated_profit.toLocaleString('en-IN')}</span>
-                                                <span className="profit-card-sub">₹{profitEstimate.profit_per_acre.toLocaleString('en-IN')}/acre</span>
+                                                <span className="profit-card-label">{t('estNetProfit', lang)}</span>
+                                                <span className="profit-card-value highlight">₹{kd(profitEstimate.estimated_profit.toLocaleString('en-IN'))}</span>
+                                                <span className="profit-card-sub">₹{kd(profitEstimate.profit_per_acre.toLocaleString('en-IN'))}/{t('perAcreUnit', lang)}</span>
                                             </div>
                                         </div>
 
                                         {/* 5-Year Price Trend */}
                                         {profitEstimate.price_history_5yr.length > 0 && (
                                             <div className="price-history">
-                                                <h4>📈 5-Year Price History — {profitEstimate.crop}</h4>
+                                                <h4>{t('fiveYearPriceTrend', lang)} — {getCropName(profitEstimate.crop, lang)}</h4>
                                                 <div className="history-bars">
                                                     {profitEstimate.price_history_5yr.map((entry, idx) => {
                                                         const maxPrice = Math.max(...profitEstimate.price_history_5yr.map(e => e.avg_price));
@@ -1852,8 +2439,8 @@ function App() {
                                                                 <div className="history-bar-wrapper">
                                                                     <div className="history-bar" style={{ height: `${heightPct}%` }}></div>
                                                                 </div>
-                                                                <span className="history-price">₹{Math.round(entry.avg_price).toLocaleString('en-IN')}</span>
-                                                                <span className="history-year">{entry.year}</span>
+                                                                <span className="history-price">₹{kd(Math.round(entry.avg_price).toLocaleString('en-IN'))}</span>
+                                                                <span className="history-year">{kd(entry.year)}</span>
                                                             </div>
                                                         );
                                                     })}
@@ -1865,11 +2452,11 @@ function App() {
 
                                 {/* All Market Rates */}
                                 <div className="other-prices-section">
-                                    <h4>📋 All Market Rates</h4>
+                                    <h4>{t('allMarketRates', lang)}</h4>
                                     <div className="price-list">
                                         {marketPrices.map((item: any) => (
                                             <div key={item.crop} className={`price-item ${item.crop === selectedMarketResult?.crop ? 'highlighted' : ''}`}>
-                                                <span className="crop-name">{item.crop}</span>
+                                                <span className="crop-name">{getCropName(item.crop, lang)}</span>
                                                 <div className="price-value">
                                                     {item.price}
                                                     <span className={`trend ${item.trend}`}>
@@ -1885,725 +2472,165 @@ function App() {
                     </div>
                 )}
 
-                {/* ===== NEIGHBOURS PLANTING DETAILS ===== */}
+                {/* ===== FARMERS AROUND MY LAND ===== */}
                 {activeTab === 'neighbours' && (
                     <div className="section-card neighbours-section">
                         <div className="neighbours-header">
                             <div>
-                                <h3>🏘️ Neighbours Planting Details</h3>
-                                <p className="section-description">Compare what your neighbouring farmers are planting, their crop yields, and profitability to make smarter decisions.</p>
+                                <h3>{t('farmersAroundTitle', lang)}</h3>
                             </div>
-                            <div className="scope-toggle">
-                                <button
-                                    className={neighbourScope === 'taluk' ? 'active' : ''}
-                                    onClick={() => {
-                                        setNeighbourScope('taluk');
-                                        setSelectedCropFilter(null);
-                                        fetchNeighbourData(registeredUser?.taluk || 'Mangaluru', undefined, registeredUser?.name, farmerHistory?.info?.primary_crop);
-                                    }}
-                                >
-                                    📍 Same Taluk
-                                </button>
-                                <button
-                                    className={neighbourScope === 'hobli' ? 'active' : ''}
-                                    onClick={() => {
-                                        setNeighbourScope('hobli');
-                                        setSelectedCropFilter(null);
-                                        if (selectedNeighbourHobli) {
-                                            fetchNeighbourData(registeredUser?.taluk || 'Mangaluru', selectedNeighbourHobli, registeredUser?.name, farmerHistory?.info?.primary_crop);
+                            <div className="around-land-search-bar">
+                                <input
+                                    type="text"
+                                    value={calcSurveyNumber}
+                                    onChange={(e) => setCalcSurveyNumber(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            fetchBhoomiMapData(registeredUser?.taluk || 'Mangaluru', selectedNeighbourHobli || undefined, undefined, calcSurveyNumber);
                                         }
                                     }}
+                                    placeholder={t('searchPlotPlaceholder', lang)}
+                                    className="around-land-input"
+                                />
+                                <button
+                                    onClick={() => fetchBhoomiMapData(registeredUser?.taluk || 'Mangaluru', selectedNeighbourHobli || undefined, undefined, calcSurveyNumber)}
+                                    className="around-land-search-btn"
+                                    disabled={loadingBhoomiMap}
                                 >
-                                    🏡 Same Hobli
+                                    {loadingBhoomiMap ? `⏳ ...` : `🔍 ${t('findAdjacentPlots', lang)}`}
                                 </button>
                             </div>
                         </div>
 
-                        {/* Hobli selector when in hobli scope */}
-                        {neighbourScope === 'hobli' && neighbourData?.available_hoblis && (
-                            <div className="hobli-selector">
-                                <label>Select Hobli:</label>
-                                <div className="hobli-chips">
-                                    {neighbourData.available_hoblis.map(h => (
-                                        <button
-                                            key={h}
-                                            className={`hobli-chip ${selectedNeighbourHobli === h ? 'active' : ''}`}
-                                            onClick={() => {
-                                                setSelectedNeighbourHobli(h);
-                                                setSelectedCropFilter(null);
-                                                fetchNeighbourData(registeredUser?.taluk || 'Mangaluru', h, registeredUser?.name, farmerHistory?.info?.primary_crop);
-                                            }}
-                                        >
-                                            {h}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
+                        {loadingBhoomiMap && (
+                            <div className="weather-loading"><span className="spinner"></span> {lang === 'kn' ? 'ಜಮೀನಿನ ವಿವರಗಳನ್ನು ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ...' : 'Loading adjacent landholders and crop details...'}</div>
                         )}
 
-                        {loadingNeighbours && (
-                             <div className="weather-loading"><span className="spinner"></span> Loading neighbour data...</div>
-                         )}
-                        {!loadingNeighbours && neighbourData && neighbourData.total_farmers > 0 && (
-                            <div className="neighbours-layout">
-                                {/* Left Column: Sidebar Crop Filter */}
-                                <aside className="neighbours-sidebar">
-                                    <h4 className="sidebar-title">
-                                        <span>🔍</span> {lang === 'kn' ? 'ಬೆಳೆ ಶೋಧಕ' : 'Crop Switcher'}
-                                    </h4>
-                                    <div className="crop-filter-list">
-                                        <button 
-                                            className={`crop-filter-btn ${selectedCropFilter === null ? 'active' : ''}`}
-                                            onClick={() => setSelectedCropFilter(null)}
+                        {/* Grid of Farmers Around My Land */}
+                        {!loadingBhoomiMap && bhoomiMapData && bhoomiMapData.parcels && (
+                            <div className="farmers-around-grid">
+                                {(() => {
+                                    const seenFarmerNames = new Set<string>();
+                                    const seenFirstNames = new Set<string>();
+                                    return bhoomiMapData.parcels
+                                        .filter(p => !p.is_user)
+                                        .filter(p => {
+                                            const fullName = (p.owner_name || '').trim().toLowerCase();
+                                            const firstName = fullName.split(' ')[0];
+                                            if (!fullName || seenFarmerNames.has(fullName) || seenFirstNames.has(firstName)) {
+                                                return false;
+                                            }
+                                            seenFarmerNames.add(fullName);
+                                            seenFirstNames.add(firstName);
+                                            return true;
+                                        })
+                                        .sort((a, b) => Number(a.is_empty) - Number(b.is_empty))
+                                        .map((p, idx) => (
+                                        <div
+                                            key={p.survey_number}
+                                            className={`around-farmer-card ${p.is_empty ? 'card-empty' : 'card-cultivating'}`}
+                                            style={{ animationDelay: `${idx * 0.05}s` }}
                                         >
-                                            <span>🌍 {lang === 'kn' ? 'ಎಲ್ಲಾ ಬೆಳೆಗಳು' : 'All Crops'}</span>
-                                            <span className="crop-filter-count">{neighbourData.total_farmers}</span>
-                                        </button>
-                                        {neighbourData.crop_summary.map(cs => (
-                                            <button
-                                                key={cs.crop}
-                                                className={`crop-filter-btn ${selectedCropFilter === cs.crop ? 'active' : ''}`}
-                                                onClick={() => setSelectedCropFilter(cs.crop)}
-                                            >
-                                                <span>{cropEmojis[cs.crop] || '🌿'} {getCropName(cs.crop, lang)}</span>
-                                                <span className="crop-filter-count">{cs.farmer_count}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </aside>
+                                            <div className="afc-header">
+                                                <div className="afc-farmer-identity">
+                                                    <div className={`afc-avatar ${p.is_empty ? 'avatar-empty' : 'avatar-cultivating'}`}>
+                                                        {p.owner_name.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="afc-name">{lang === 'kn' ? (p.owner_name_kn || fn(p.owner_name)) : p.owner_name}</h4>
+                                                        <span className="afc-survey-badge">
+                                                            {t('plotNumber', lang)}: <strong>{p.survey_number}</strong>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <span className={`afc-status-pill ${p.is_empty ? 'pill-empty' : 'pill-cultivating'}`}>
+                                                    {p.is_empty ? `⚠️ ${t('statusEmptyLand', lang)}` : `🌱 ${t('statusActivelyGrowing', lang)}`}
+                                                </span>
+                                            </div>
 
-                                {/* Right Column: Map & Analytics */}
-                                <div className="neighbours-main-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
-                                    <div className="neighbour-scope-badge" style={{ marginTop: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                                            <span className="scope-icon">📊</span>
-                                            <span><strong>{neighbourData.total_farmers}</strong> farmers found in <strong>{neighbourData.scope}</strong></span>
-                                        </div>
-                                        <div>
-                                            {neighbourData.is_real_data ? (
-                                                <span className="data-source-pill real" title={neighbourData.data_source_label || 'Verified farmer survey records'}>
-                                                    ✓ {t('verifiedFarmerData', lang)}
-                                                </span>
-                                            ) : (
-                                                <span className="data-source-pill demo" title={neighbourData.data_source_label || 'Simulated agro-climatic baseline'}>
-                                                    ℹ️ {t('demoSimulationData', lang)}
-                                                </span>
+                                            {/* Land Extent and Soil Type */}
+                                            <div className="afc-land-specs">
+                                                <div className="afc-spec-item">
+                                                    <span className="spec-label">{t('areaLabel', lang)}</span>
+                                                    <span className="spec-val">{p.land_acres} {t('acres', lang)} {p.land_guntas} {t('guntas', lang)}</span>
+                                                </div>
+                                                <div className="afc-spec-item">
+                                                    <span className="spec-label">{t('soilTypeLabel', lang)}</span>
+                                                    <span className="spec-val">{lang === 'kn' ? p.soil_type_kn : p.soil_type}</span>
+                                                </div>
+                                                <div className="afc-spec-item">
+                                                    <span className="spec-label">{t('landClassLabel', lang)}</span>
+                                                    <span className="spec-val">{lang === 'kn' ? p.land_type_kn : p.land_type}</span>
+                                                </div>
+                                            </div>
+
+                                            {/* If Actively Cultivating */}
+                                            {!p.is_empty && (
+                                                <div className="afc-growing-box">
+                                                    <div className="growing-header">
+                                                        <span className="growing-label">{t('whatGrowing', lang)}:</span>
+                                                    </div>
+                                                    <div className="growing-crop-display">
+                                                        <span className="crop-big-emoji">{getCropIcon(p.crop_grown, '🌿')}</span>
+                                                        <div>
+                                                            <span className="crop-big-name">{getCropName(p.crop_grown, lang)}</span>
+                                                            <span className="crop-sub-type">{lang === 'kn' ? p.land_type_kn : p.land_type} • {lang === 'kn' ? p.soil_type_kn : p.soil_type}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             )}
-                                        </div>
-                                    </div>
 
-                                    {/* Demand Insight Banner */}
-                                    {neighbourData.insight && (
-                                        <div className="demand-insight-banner">
-                                            <p>{neighbourData.insight}</p>
-                                        </div>
-                                    )}
+                                            {/* If Left Land Empty: Suggest Crop */}
+                                            {p.is_empty && (
+                                                <div className="afc-empty-suggestion-box">
+                                                    <div className="empty-warning-bar">
+                                                        <span>⚠️</span>
+                                                        <span>{lang === 'kn' ? 'ಈ ಜಮೀನಿನಲ್ಲಿ ಪ್ರಸ್ತುತ ಯಾವುದೇ ಬೆಳೆ ಬೆಳೆದಿಲ್ಲ (ಖಾಲಿ ಜಮೀನು).' : 'This land was left empty / fallow.'}</span>
+                                                    </div>
 
-                                    {/* Compare Recommended Varieties with Neighbours Results */}
-                                    {recommendations?.recommended_crops && recommendations.recommended_crops.length > 0 && (
-                                        <div className="neighbour-rec-comparison-box">
-                                            <div className="nrc-header">
-                                                <div>
-                                                    <h4>🔍 {t('compareWithRecommendations', lang)}</h4>
-                                                    <p className="nrc-sub">{t('compareRecommendationsSub', lang)}</p>
-                                                </div>
-                                            </div>
-                                            <div className="nrc-grid">
-                                                {recommendations.recommended_crops.slice(0, 4).map((rc: any) => {
-                                                    const cropName = typeof rc === 'string' ? rc : rc.crop;
-                                                    const bestVar = rc.best_variety || (rc.varieties && rc.varieties[0]);
-                                                    const nbCrop = neighbourData.crop_summary.find(cs => cs.crop.toLowerCase() === cropName.toLowerCase());
-                                                    const isSelectedCrop = selectedCropFilter === cropName;
-
-                                                    return (
-                                                        <div key={cropName} className={`nrc-card ${isSelectedCrop ? 'active-filter' : ''}`}>
-                                                            <div className="nrc-card-top">
-                                                                <div className="nrc-title-wrap">
-                                                                    <span className="nrc-icon">{cropEmojis[cropName] || '🌿'}</span>
-                                                                    <div>
-                                                                        <strong className="nrc-crop-name">{getCropName(cropName, lang)}</strong>
-                                                                        {bestVar && (
-                                                                            <span className="nrc-best-var">
-                                                                                {t('recommendedVariety', lang)}: <strong>{bestVar.name}</strong> ({bestVar.suitability_score}% match)
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                {nbCrop ? (
-                                                                    <span className={`nrc-status-pill ${nbCrop.percentage >= 40 ? 'high' : nbCrop.percentage >= 15 ? 'balanced' : 'niche'}`}>
-                                                                        {nbCrop.percentage >= 40 ? t('highCompetition', lang) : nbCrop.percentage >= 15 ? t('balancedAdoption', lang) : t('nicheOpportunity', lang)}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="nrc-status-pill opportunity">
-                                                                        {t('nicheOpportunity', lang)}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-
-                                                            <div className="nrc-metrics-grid">
-                                                                <div className="nrc-metric-cell">
-                                                                    <span className="nrc-metric-label">Recommended Criteria:</span>
-                                                                    <span className="nrc-metric-val">
-                                                                        {bestVar?.expected_yield ? `${bestVar.expected_yield}` : `${rc.price || 'Market Rate'}`} • {bestVar?.season || 'Kharif'}
-                                                                    </span>
-                                                                    <span className="nrc-metric-sub">
-                                                                        Optimal: {bestVar?.soil_type || 'Loamy'} {bestVar?.soil_ph_range ? `(pH ${bestVar.soil_ph_range[0]}-${bestVar.soil_ph_range[1]})` : ''}
-                                                                    </span>
-                                                                </div>
-                                                                <div className="nrc-metric-cell">
-                                                                    <span className="nrc-metric-label">Neighbours' Reality:</span>
-                                                                    {nbCrop ? (
-                                                                        <>
-                                                                            <span className="nrc-metric-val highlight">
-                                                                                {nbCrop.farmer_count} farmers • Avg {nbCrop.avg_yield_per_acre} {nbCrop.yield_unit}/acre
-                                                                            </span>
-                                                                            <span className="nrc-metric-sub">
-                                                                                Avg Profit: ₹{nbCrop.avg_profit_per_acre.toLocaleString('en-IN')}/acre • {nbCrop.total_land_acres} acres total
-                                                                            </span>
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <span className="nrc-metric-val muted">0 neighbours planting</span>
-                                                                            <span className="nrc-metric-sub">Zero local supply competition in {neighbourData.scope}</span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Actual Cultivars Grown by Neighbours */}
-                                                            {nbCrop?.varieties_breakdown && nbCrop.varieties_breakdown.length > 0 && (
-                                                                <div className="nrc-cultivars-row">
-                                                                    <span className="nrc-cultivars-label">{t('varietiesPlanted', lang)}:</span>
-                                                                    <div className="nrc-cultivars-list">
-                                                                        {nbCrop.varieties_breakdown.map(vb => (
-                                                                            <span key={vb.variety} className="nrc-var-chip">
-                                                                                <strong>{vb.variety}</strong> ({vb.farmers_count} {t('farmers', lang)} • {vb.avg_yield} {nbCrop.yield_unit}/acre • {vb.market_price_display || vb.growing_season})
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            <div className="nrc-card-actions">
-                                                                {nbCrop && (
-                                                                    <button
-                                                                        type="button"
-                                                                        className={`nrc-action-btn ${isSelectedCrop ? 'active' : ''}`}
-                                                                        onClick={() => setSelectedCropFilter(isSelectedCrop ? null : cropName)}
-                                                                    >
-                                                                        {isSelectedCrop ? 'Showing in List' : `View ${nbCrop.farmer_count} Farmers`}
-                                                                    </button>
-                                                                )}
-                                                                <button
-                                                                    type="button"
-                                                                    className="nrc-action-btn secondary"
-                                                                    onClick={() => openVarietyModal(cropName)}
-                                                                >
-                                                                    {t('exploreVarieties', lang)}
-                                                                </button>
-                                                            </div>
+                                                    <div className="suggested-crops-section">
+                                                        <div className="sc-header">
+                                                            <span>💡</span>
+                                                            <strong>{t('suggestedCropForEmpty', lang)}:</strong>
                                                         </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    )}
-
-                                {/* Bhoomi RTC Land Boundary Map */}
-                                <div className="bhoomi-map-section">
-                                    <div className="bhoomi-map-card">
-                                        <div className="bhoomi-map-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
-                                            <div className="bhoomi-map-title-block">
-                                                <h4>{t('bhoomiMapTitle', lang)}</h4>
-                                                <p>{t('bhoomiMapDesc', lang)}</p>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                                <input
-                                                    type="text"
-                                                    value={calcSurveyNumber}
-                                                    onChange={(e) => setCalcSurveyNumber(e.target.value)}
-                                                    placeholder={lang === 'kn' ? 'ಸರ್ವೆ ಸಂಖ್ಯೆ' : 'Survey No.'}
-                                                    style={{
-                                                        padding: '0.45rem 0.75rem',
-                                                        border: '1.5px solid rgba(167, 139, 250, 0.18)',
-                                                        borderRadius: 'var(--radius-sm)',
-                                                        background: 'rgba(20, 16, 40, 0.7)',
-                                                        color: 'var(--text-dark)',
-                                                        fontSize: '0.88rem',
-                                                        width: '140px'
-                                                    }}
-                                                />
-                                                <button
-                                                    onClick={() => fetchBhoomiMapData(registeredUser?.taluk || 'Mangaluru', selectedNeighbourHobli || undefined)}
-                                                    className="refresh-weather-btn"
-                                                    style={{ padding: '0.45rem 0.85rem' }}
-                                                >
-                                                    🔍 {lang === 'kn' ? 'ನಕ್ಷೆ ನೋಡಿ' : 'Map Land'}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="bhoomi-map-hint">
-                                            <span>💡</span>
-                                            <span>{t('clickLandParcel', lang)}</span>
-                                        </div>
-
-                                        {loadingBhoomiMap ? (
-                                            <div className="weather-loading"><span className="spinner"></span> Loading cadastral map...</div>
-                                        ) : bhoomiMapData ? (
-                                            <>
-                                                <div className="bhoomi-map-container">
-                                                    <MapContainer
-                                                        center={bhoomiMapData.center}
-                                                        zoom={16}
-                                                        style={{ height: '100%', width: '100%' }}
-                                                        scrollWheelZoom={true}
-                                                    >
-                                                        <TileLayer
-                                                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                                                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                                                        />
-                                                        {bhoomiMapData.parcels.map((p) => {
-                                                            const isMatched = !selectedCropFilter || 
-                                                                p.crop_grown === selectedCropFilter || 
-                                                                (p.is_empty && selectedCropFilter === 'Fallow');
-                                                            return (
-                                                                <Polygon
-                                                                    key={p.survey_number}
-                                                                    positions={p.polygon}
-                                                                    pathOptions={{
-                                                                        color: isMatched ? (p.is_user ? '#a78bfa' : p.is_empty ? '#94a3b8' : '#f43f5e') : '#4b5563',
-                                                                        fillColor: p.is_user 
-                                                                            ? '#7c3aed' 
-                                                                            : p.is_empty ? '#1e293b'
-                                                                            : p.crop_grown === 'Rice' ? '#34d399'
-                                                                            : p.crop_grown === 'Arecanut' ? '#fbbf24'
-                                                                            : p.crop_grown === 'Coconut' ? '#a855f7'
-                                                                            : p.crop_grown === 'Banana' ? '#f43f5e'
-                                                                            : '#3b82f6',
-                                                                        fillOpacity: isMatched ? (p.is_empty ? 0.35 : 0.65) : 0.05,
-                                                                        opacity: isMatched ? 1.0 : 0.15,
-                                                                        weight: isMatched ? (p.is_user ? 4.0 : 2.0) : 1.0,
-                                                                        dashArray: p.is_user ? '3, 6' : p.is_empty ? '4, 4' : ''
-                                                                    }}
-                                                                >
-                                                                <Tooltip direction="center" offset={[0, 0]} opacity={0.9} permanent>
-                                                                    <span style={{ fontWeight: 'bold', fontSize: '0.8rem', color: p.is_empty ? '#64748b' : '#064e3b' }}>{p.survey_number}</span>
-                                                                </Tooltip>
-                                                                <Popup>
-                                                                    <div className="bhoomi-rtc-popup">
-                                                                        <div className="bhoomi-rtc-header">
-                                                                            <h5>{t('bhoomiRtcTitle', lang)}</h5>
-                                                                            <span>{t('bhoomiGovt', lang)}</span>
-                                                                        </div>
-                                                                        <div className="bhoomi-rtc-watermark">BHOOMI</div>
-                                                                        <table className="bhoomi-rtc-table">
-                                                                            <tbody>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('districtLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">{bhoomiMapData.district}</td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('talukLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">{bhoomiMapData.taluk}</td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('hobliLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">{bhoomiMapData.hobli}</td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('surveyNoLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">{p.survey_number.split('/')[0]}</td>
-                                                                                </tr>
-                                                                                {p.survey_number.includes('/') && (
-                                                                                    <tr>
-                                                                                        <td className="bhoomi-rtc-label">{t('hissaNoLabel', lang)}</td>
-                                                                                        <td className="bhoomi-rtc-val">{p.survey_number.split('/')[1]}</td>
-                                                                                    </tr>
-                                                                                )}
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('ownerNameLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val bhoomi-rtc-highlight-val">
-                                                                                        {lang === 'kn' ? p.owner_name_kn : p.owner_name}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('areaLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">
-                                                                                        {p.land_acres} {t('acres', lang)} {p.land_guntas} {t('guntas', lang)}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('landClassLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">
-                                                                                        {lang === 'kn' ? p.land_type_kn : p.land_type}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">{t('soilTypeLabel', lang)}</td>
-                                                                                    <td className="bhoomi-rtc-val">
-                                                                                        {lang === 'kn' ? p.soil_type_kn : p.soil_type}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label">
-                                                                                        {p.is_empty ? t('statusLabel', lang) : t('cropGrownLabel', lang)}
-                                                                                    </td>
-                                                                                    <td className="bhoomi-rtc-val bhoomi-rtc-highlight-val" style={p.is_empty ? { color: '#fb7185', fontWeight: 'bold' } : {}}>
-                                                                                        {p.is_empty ? `⚠️ ${t('fallowStatus', lang)}` : `${cropEmojis[p.crop_grown] || '🌿'} ${getCropName(p.crop_grown, lang)}`}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label" style={{ color: '#34d399', fontWeight: 'bold' }}>
-                                                                                        {t('recommendedCropsLabel', lang)}
-                                                                                    </td>
-                                                                                    <td className="bhoomi-rtc-val" style={{ color: '#34d399', fontWeight: 'bold' }}>
-                                                                                        {p.recommended_crops?.map(crop => `${cropEmojis[crop] || '🌿'} ${getCropName(crop, lang)}`).join(', ') || 'N/A'}
-                                                                                    </td>
-                                                                                </tr>
-                                                                                <tr>
-                                                                                    <td className="bhoomi-rtc-label" style={{ color: '#a78bfa', fontWeight: 'bold' }}>
-                                                                                        {t('suggestedWorkLabel', lang)}
-                                                                                    </td>
-                                                                                    <td className="bhoomi-rtc-val" style={{ fontSize: '0.85rem', fontStyle: 'italic', lineHeight: '1.2', color: '#d4d0e8' }}>
-                                                                                        {lang === 'kn' ? p.suggested_work_kn : p.suggested_work}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            </tbody>
-                                                                        </table>
-                                                                        {p.is_user && (
-                                                                            <span className="bhoomi-rtc-user-badge">{t('userLandHighlight', lang)}</span>
-                                                                        )}
-                                                                    </div>
-                                                                </Popup>
-                                                            </Polygon>
-                                                            );
-                                                        })}
-                                                    </MapContainer>
-                                                </div>
-
-                                                <div className="bhoomi-map-legend">
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#34d399', border: '2px dashed #10b981' }}></div>
-                                                        <span>{t('userLandHighlight', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#f1f5f9', border: '1px dashed #94a3b8' }}></div>
-                                                        <span>{t('fallowLegend', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#198754' }}></div>
-                                                        <span>{getCropName('Rice', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#fbbf24' }}></div>
-                                                        <span>{getCropName('Arecanut', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#a855f7' }}></div>
-                                                        <span>{getCropName('Coconut', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#f43f5e' }}></div>
-                                                        <span>{getCropName('Banana', lang)}</span>
-                                                    </div>
-                                                    <div className="legend-item">
-                                                        <div className="legend-color" style={{ backgroundColor: '#3b82f6' }}></div>
-                                                        <span>{lang === 'kn' ? 'ಇತರ ಬೆಳೆಗಳು' : 'Other Crops'}</span>
-                                                    </div>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="weather-loading">No map data available. Please check location parameters.</div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Crop Popularity Chart with Multi-Variety Insights */}
-                                <div className="crop-popularity-section">
-                                    <div className="section-title-row">
-                                        <h4>🌾 {t('cropDemandDist', lang)}</h4>
-                                        <span className="section-note">{neighbourData.crop_summary.length} crops cultivated locally</span>
-                                    </div>
-                                    <p className="chart-subtitle">What your neighbours are growing — higher bars mean more local market supply</p>
-                                    <div className="popularity-bars">
-                                        {neighbourData.crop_summary.map((cs, idx) => {
-                                            const isRec = recommendations?.recommended_crops?.some(
-                                                (rc: any) => (typeof rc === 'string' ? rc : rc.crop).toLowerCase() === cs.crop.toLowerCase()
-                                            );
-
-                                            return (
-                                                <div key={cs.crop} className="popularity-bar-row" style={{ animationDelay: `${idx * 0.1}s` }}>
-                                                    <div className="pop-crop-info">
-                                                        <div className="pop-crop-name-block">
-                                                            <span className="pop-crop-emoji">{cropEmojis[cs.crop] || '🌿'}</span>
-                                                            <span className="pop-crop-name">{getCropName(cs.crop, lang)}</span>
-                                                            {isRec && (
-                                                                <span className="pop-rec-star">⭐ {t('recommendedForYou', lang)}</span>
-                                                            )}
-                                                        </div>
-                                                        <span className="pop-farmer-count">{cs.farmer_count} {t('farmers', lang)} ({cs.total_land_acres} acres)</span>
-                                                    </div>
-                                                    
-                                                    <div className="pop-bar-track">
-                                                        <div
-                                                            className="pop-bar-fill"
-                                                            style={{ width: `${cs.percentage}%`, animationDelay: `${idx * 0.15}s` }}
-                                                        >
-                                                            <span className="pop-bar-label">{cs.percentage}%</span>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Cultivars & Varieties Breakdown */}
-                                                    <div className="pop-varieties-strip">
-                                                        <span className="pop-var-label">{t('varietiesPlanted', lang)}:</span>
-                                                        <div className="pop-var-chips">
-                                                            {cs.varieties_breakdown && cs.varieties_breakdown.length > 0 ? (
-                                                                cs.varieties_breakdown.map(vb => (
-                                                                    <span 
-                                                                        key={vb.variety} 
-                                                                        className="pop-var-chip active-neighbour"
-                                                                        onClick={() => openVarietyModal(cs.crop)}
-                                                                        title={`Click to explore ${vb.variety} agronomy details`}
-                                                                    >
-                                                                        <strong>{vb.variety}</strong>: {vb.farmers_count} {t('farmers', lang)} ({vb.avg_yield} {cs.yield_unit}/acre • {vb.market_price_display || vb.growing_season})
-                                                                    </span>
-                                                                ))
-                                                            ) : cs.available_varieties && cs.available_varieties.length > 0 ? (
-                                                                cs.available_varieties.slice(0, 4).map(v => (
-                                                                    <span 
-                                                                        key={v} 
-                                                                        className="pop-var-chip"
-                                                                        onClick={() => openVarietyModal(cs.crop)}
-                                                                    >
-                                                                        {v}
+                                                        <div className="sc-chips-list">
+                                                            {p.recommended_crops && p.recommended_crops.length > 0 ? (
+                                                                p.recommended_crops.map(c => (
+                                                                    <span key={c} className="sc-crop-chip">
+                                                                        <span>{getCropIcon(c, '🌿')}</span>
+                                                                        <strong>{getCropName(c, lang)}</strong>
                                                                     </span>
                                                                 ))
                                                             ) : (
-                                                                <span className="pop-var-chip">Regional Cultivars</span>
+                                                                <span className="sc-crop-chip">
+                                                                    <span>🌾</span>
+                                                                    <strong>{getCropName('Rice', lang)}</strong>
+                                                                </span>
                                                             )}
                                                         </div>
                                                     </div>
+
+                                                    {/* Work / Revitalization guidance */}
+                                                    {(p.suggested_work || p.suggested_work_kn) && (
+                                                        <div className="empty-work-guidance">
+                                                            <div className="ewg-title">🛠️ {t('suggestedWorkForEmpty', lang)}:</div>
+                                                            <p className="ewg-text">{lang === 'kn' ? p.suggested_work_kn : p.suggested_work}</p>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-
-                                {/* Comprehensive Comparison Table */}
-                                <div className="neighbour-comparison-table">
-                                    <div className="section-title-row">
-                                        <h4>📋 Crop Yield, Market Price & Cultivar Comparison</h4>
-                                    </div>
-                                    <div className="comparison-table-wrapper">
-                                        <table className="comparison-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Crop & Verified Varieties</th>
-                                                    <th>Nearby Farmers</th>
-                                                    <th>Growing Season</th>
-                                                    <th>Soil & pH</th>
-                                                    <th>Market Price</th>
-                                                    <th>Avg Yield/Acre</th>
-                                                    <th className="profit-col">Avg Profit/Acre</th>
-                                                    <th>Recommendation</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {neighbourData.crop_summary.map((cs, idx) => {
-                                                    const isRec = recommendations?.recommended_crops?.some(
-                                                        (rc: any) => (typeof rc === 'string' ? rc : rc.crop).toLowerCase() === cs.crop.toLowerCase()
-                                                    );
-                                                    const varNames = cs.available_varieties?.slice(0, 3) || [];
-
-                                                    return (
-                                                        <tr key={cs.crop} className="comparison-row" style={{ animationDelay: `${idx * 0.08}s` }}>
-                                                            <td className="comp-crop-cell">
-                                                                <div className="comp-crop-content">
-                                                                    <div className="comp-crop-title">
-                                                                        <span className="comp-crop-emoji">{cropEmojis[cs.crop] || '🌿'}</span>
-                                                                        <strong>{getCropName(cs.crop, lang)}</strong>
-                                                                    </div>
-                                                                    {varNames.length > 0 && (
-                                                                        <div className="comp-variety-subtext">
-                                                                            {varNames.map(v => (
-                                                                                <span 
-                                                                                    key={v} 
-                                                                                    className="table-var-pill"
-                                                                                    onClick={() => openVarietyModal(cs.crop)}
-                                                                                    title="Click to view variety specs"
-                                                                                >
-                                                                                    {v}
-                                                                                </span>
-                                                                            ))}
-                                                                            {cs.varieties_count && cs.varieties_count > 3 && (
-                                                                                <small className="more-var-text" onClick={() => openVarietyModal(cs.crop)}>
-                                                                                    +{cs.varieties_count - 3} more
-                                                                                </small>
-                                                                            )}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td className="comp-count-cell">
-                                                                <strong>{cs.farmer_count}</strong>
-                                                                <small style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.74rem' }}>{cs.total_land_acres} ac</small>
-                                                            </td>
-                                                            <td className="comp-season-cell">
-                                                                <span className="season-pill">{cs.primary_season || 'Kharif'}</span>
-                                                            </td>
-                                                            <td className="comp-soil-cell">
-                                                                <span className="soil-text">{cs.soil_requirements || 'Loamy Soil'}</span>
-                                                                {cs.soil_ph_range && (
-                                                                    <small className="ph-text" style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
-                                                                        pH {cs.soil_ph_range[0]} - {cs.soil_ph_range[1]}
-                                                                    </small>
-                                                                )}
-                                                            </td>
-                                                            <td className="comp-price-cell">
-                                                                <span className="price-tag">{cs.price_range?.display || cs.top_varieties?.[0]?.price_display || 'Market Rate'}</span>
-                                                            </td>
-                                                            <td className="comp-yield-cell">
-                                                                <strong>{cs.avg_yield_per_acre}</strong> {cs.yield_unit}/acre
-                                                            </td>
-                                                            <td className="comp-profit-cell">
-                                                                ₹{cs.avg_profit_per_acre.toLocaleString('en-IN')}
-                                                            </td>
-                                                            <td className="comp-rec-cell">
-                                                                {isRec ? (
-                                                                    <span className="table-rec-badge match">✓ {t('recommendedForYou', lang)}</span>
-                                                                ) : (
-                                                                    <span className="table-rec-badge alt">Alternative</span>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-
-                                {/* Neighbour Farmer Cards */}
-                                <div className="neighbour-cards-section">
-                                    <div className="section-title-row">
-                                        <h4>👥 {t('individualNeighbours', lang)}</h4>
-                                        <span className="section-note">
-                                            {selectedCropFilter ? `Showing ${selectedCropFilter} growers` : `All ${neighbourData.neighbours.length} nearby farmers`}
-                                        </span>
-                                    </div>
-                                    <p className="chart-subtitle">{t('neighbourDetailsSub', lang)}</p>
-                                    
-                                    <div className="neighbour-cards-grid">
-                                        {neighbourData.neighbours
-                                            .filter(n => !selectedCropFilter || n.primary_crop === selectedCropFilter)
-                                            .map((n, idx) => {
-                                                const isRecCrop = recommendations?.recommended_crops?.some(
-                                                    (rc: any) => (typeof rc === 'string' ? rc : rc.crop).toLowerCase() === n.primary_crop.toLowerCase()
-                                                );
-
-                                                return (
-                                                    <div key={n.farmer_id} className="neighbour-card" style={{ animationDelay: `${idx * 0.06}s` }}>
-                                                        <div className="nc-header">
-                                                            <div className="nc-avatar">{n.name.charAt(0)}</div>
-                                                            <div className="nc-name-info">
-                                                                <div className="nc-name-row">
-                                                                    <span className="nc-name">{n.name}</span>
-                                                                    {n.is_real_data ? (
-                                                                        <span className="nc-source-pill real" title="Verified farmer record from Taluk survey">Verified</span>
-                                                                    ) : (
-                                                                        <span className="nc-source-pill demo" title="Simulated farmer based on agro-climatic baseline">Demo</span>
-                                                                    )}
-                                                                </div>
-                                                                <span className="nc-hobli">📍 {n.hobli}</span>
-                                                            </div>
-                                                            {isRecCrop && (
-                                                                <span className="nc-rec-pill" title="Matches your farm recommendation">⭐ Recommended</span>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="nc-details">
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">{t('primaryCrop', lang)}</span>
-                                                                <span className="nc-detail-value">{cropEmojis[n.primary_crop] || '🌿'} {getCropName(n.primary_crop, lang)}</span>
-                                                            </div>
-                                                            
-                                                            {/* Specific Variety Grown */}
-                                                            <div className="nc-detail-row highlight-row">
-                                                                <span className="nc-detail-label">Cultivar / Variety</span>
-                                                                <span className="nc-detail-value var-highlight">
-                                                                    <strong>{n.variety || 'Local Standard'}</strong>
-                                                                    {n.variety_scientific && <small className="nc-sci-sub"> ({n.variety_scientific})</small>}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Growing Season */}
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">{t('growingSeason', lang)}</span>
-                                                                <span className="nc-detail-value">{n.growing_season || 'Kharif'}</span>
-                                                            </div>
-
-                                                            {/* Market Price */}
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">{t('marketPrice', lang)}</span>
-                                                                <span className="nc-detail-value price-text">
-                                                                    {n.market_price_display || (n.market_price ? `₹${n.market_price}/${n.yield_unit}` : 'Market Rate')}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Soil Condition & pH */}
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">{t('soilConditions', lang)}</span>
-                                                                <span className="nc-detail-value">
-                                                                    {n.soil_type} {n.soil_ph ? `(pH ${n.soil_ph})` : ''}
-                                                                </span>
-                                                            </div>
-
-                                                            {/* Land Area */}
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">Land Area</span>
-                                                                <span className="nc-detail-value">{n.land_acres} acres {n.land_guntas ? `${n.land_guntas} gts` : ''}</span>
-                                                            </div>
-
-                                                            {/* Yield & Yield/Acre */}
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">Yield ({n.latest_year})</span>
-                                                                <span className="nc-detail-value">{n.latest_yield.toLocaleString('en-IN')} {n.yield_unit}</span>
-                                                            </div>
-                                                            <div className="nc-detail-row">
-                                                                <span className="nc-detail-label">Yield/Acre</span>
-                                                                <span className="nc-detail-value yield-text">{n.yield_per_acre.toLocaleString('en-IN')} {n.yield_unit}</span>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="nc-footer">
-                                                            <div className="nc-profit">
-                                                                <span className="nc-profit-label">Profit/Acre</span>
-                                                                <span className="nc-profit-value">₹{n.profit_per_acre.toLocaleString('en-IN')}</span>
-                                                            </div>
-                                                            <button 
-                                                                type="button" 
-                                                                className="nc-explore-var-btn"
-                                                                onClick={() => openVarietyModal(n.primary_crop)}
-                                                                title="Explore all cultivars of this crop"
-                                                            >
-                                                                {t('exploreVarieties', lang)} →
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                    </div>
-                                </div>
-                                </div>
+                                            )}
+                                        </div>
+                                    ));
+                                })()}
                             </div>
                         )}
 
-                        {!loadingNeighbours && neighbourData && neighbourData.total_farmers === 0 && (
+                        {!loadingBhoomiMap && (!bhoomiMapData || !bhoomiMapData.parcels || bhoomiMapData.parcels.length === 0) && (
                             <div className="no-data-card">
                                 <span className="no-data-icon">🏘️</span>
-                                <h4>No Neighbour Data Available</h4>
-                                <p>No farmer data was found for <strong>{neighbourData.scope}</strong>. Try switching to taluk-level view for broader results.</p>
+                                <h4>{t('noAdjacentFound', lang)}</h4>
+                                <p>Please enter your survey number above to discover adjacent farmers.</p>
                             </div>
                         )}
                     </div>
@@ -2613,47 +2640,47 @@ function App() {
                 {activeTab === 'history' && farmerHistory && (
                     <div className="section-card history-section">
                         <div className="history-header">
-                            <h3>📊 My Farm Performance History</h3>
-                            <div className="farmer-id-badge">Farmer ID: {farmerHistory.info.id}</div>
+                            <h3>{t('farmHistoryTitle', lang)}</h3>
+                            <div className="farmer-id-badge">{t('farmerID', lang)} {kd(farmerHistory.info.id)}</div>
                         </div>
-                        <p className="section-description">Analyzing your performance data from 2021 to 2025. This summary is based on your registered land and crop records.</p>
+                        <p className="section-description">{t('analyzingPerformance', lang)}</p>
 
                         <div className="farm-stat-cards">
                             <div className="stat-card">
                                 <span className="stat-icon">🗺️</span>
                                 <div className="stat-info">
-                                    <span className="stat-value">{registeredUser?.land_area_acres ?? farmerHistory.info.acres} Acres</span>
+                                    <span className="stat-value">{kd(registeredUser?.land_area_acres ?? farmerHistory.info.acres)} {t('acres', lang)}</span>
                                     {(registeredUser?.land_area_guntas ?? farmerHistory.info.guntas) !== undefined && (
-                                        <span className="stat-sub">{registeredUser?.land_area_guntas ?? farmerHistory.info.guntas} Guntas</span>
+                                        <span className="stat-sub">{kd(registeredUser?.land_area_guntas ?? farmerHistory.info.guntas)} {t('guntas', lang)}</span>
                                     )}
                                 </div>
                             </div>
                             <div className="stat-card">
-                                <span className="stat-icon">🌱</span>
+                                <span className="stat-icon">{getCropIcon(farmerHistory.info.primary_crop, '🌱')}</span>
                                 <div className="stat-info">
-                                    <span className="stat-label">Primary Crop</span>
-                                    <span className="stat-value">{farmerHistory.info.primary_crop}</span>
+                                    <span className="stat-label">{t('primaryCrop', lang)}</span>
+                                    <span className="stat-value">{getCropName(farmerHistory.info.primary_crop, lang)}</span>
                                 </div>
                             </div>
                             <div className="stat-card">
                                 <span className="stat-icon">🏔️</span>
                                 <div className="stat-info">
-                                    <span className="stat-label">Soil Type</span>
-                                    <span className="stat-value">{farmerHistory.info.soil_type}</span>
+                                    <span className="stat-label">{t('soilType', lang)}</span>
+                                    <span className="stat-value">{getSoilName(farmerHistory.info.soil_type, lang)}</span>
                                 </div>
                             </div>
                             <div className="stat-card">
                                 <span className="stat-icon">🧪</span>
                                 <div className="stat-info">
-                                    <span className="stat-label">pH Level</span>
-                                    <span className="stat-value">{farmerHistory.info.ph}</span>
+                                    <span className="stat-label">{t('avgPH', lang)}</span>
+                                    <span className="stat-value">{kd(farmerHistory.info.ph)}</span>
                                 </div>
                             </div>
                         </div>
 
                         <div className="history-charts-grid">
                             <div className="chart-container">
-                                <h4>📈 Annual Yield Trend ({farmerHistory.history[0]?.unit})</h4>
+                                <h4>{t('annualYieldTrend', lang)} ({fu(farmerHistory.history[0]?.unit)})</h4>
                                 <div className="history-bars personal-bars">
                                     {farmerHistory.history.map((entry, idx) => {
                                         const maxVal = Math.max(...farmerHistory.history.map(e => e.yield));
@@ -2663,8 +2690,8 @@ function App() {
                                                 <div className="history-bar-wrapper">
                                                     <div className="history-bar yield-bar" style={{ height: `${heightPct}%` }}></div>
                                                 </div>
-                                                <span className="history-price">{entry.yield.toFixed(1)}</span>
-                                                <span className="history-year">{entry.year}</span>
+                                                <span className="history-price">{kd(entry.yield.toFixed(1))}</span>
+                                                <span className="history-year">{kd(entry.year)}</span>
                                             </div>
                                         );
                                     })}
@@ -2672,7 +2699,7 @@ function App() {
                             </div>
 
                             <div className="chart-container">
-                                <h4>💰 Annual Net Profit Trend (INR)</h4>
+                                <h4>{t('annualProfitTrend', lang)} ({t('inr', lang)})</h4>
                                 <div className="history-bars personal-bars">
                                     {farmerHistory.history.map((entry, idx) => {
                                         const maxVal = Math.max(...farmerHistory.history.map(e => e.profit));
@@ -2682,8 +2709,8 @@ function App() {
                                                 <div className="history-bar-wrapper">
                                                     <div className="history-bar profit-bar" style={{ height: `${heightPct}%` }}></div>
                                                 </div>
-                                                <span className="history-price">₹{(entry.profit / 1000).toFixed(0)}k</span>
-                                                <span className="history-year">{entry.year}</span>
+                                                <span className="history-price">₹{kd((entry.profit / 1000).toFixed(0))}{lang === 'kn' ? 'ಸಾ' : 'k'}</span>
+                                                <span className="history-year">{kd(entry.year)}</span>
                                             </div>
                                         );
                                     })}
@@ -2692,12 +2719,211 @@ function App() {
                         </div>
 
                         <div className="performance-summary">
-                            <p>🌟 <strong>Performance Note:</strong> Your {farmerHistory.info.primary_crop} yield was highest in <strong>{
-                                farmerHistory.history.reduce((prev, current) => (prev.yield > current.yield) ? prev : current).year
-                            }</strong> with a total profit of <strong>₹{
-                                farmerHistory.history.reduce((prev, current) => (prev.profit > current.profit) ? prev : current).profit.toLocaleString('en-IN')
+                            <p>🌟 <strong>{t('performanceNote', lang)}</strong> {t('performanceNoteDesc', lang)} <strong>{
+                                kd(farmerHistory.history.reduce((prev, current) => (prev.yield > current.yield) ? prev : current).year)
+                            }</strong> {t('withTotalProfit', lang)} <strong>₹{
+                                kd(farmerHistory.history.reduce((prev, current) => (prev.profit > current.profit) ? prev : current).profit.toLocaleString('en-IN'))
                             }</strong>.</p>
                         </div>
+                    </div>
+                )}
+
+                {/* =====================================================
+                    FARMER CROP HISTORY FORM
+                    ===================================================== */}
+                {showCropHistoryForm && (
+                    <div className="crop-history-modal-backdrop" onClick={() => setShowCropHistoryForm(false)}>
+                        <section
+                            className="crop-history-modal"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="crop-history-modal-title"
+                            onClick={event => event.stopPropagation()}
+                        >
+                            <header className="crop-history-modal-header">
+                                <div>
+                                    <h2 id="crop-history-modal-title">
+                                        {editingCropHistoryId ? t('cropHistoryUpdate', lang) : t('cropHistoryTitle', lang)}
+                                    </h2>
+                                    <p>{t('cropHistoryModalHint', lang)}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="profile-edit-close"
+                                    onClick={() => setShowCropHistoryForm(false)}
+                                    aria-label={t('cropHistoryCancel', lang)}
+                                >
+                                    ✕
+                                </button>
+                            </header>
+
+                            <form onSubmit={handleSaveCropHistory}>
+                                <div className="crop-history-drafts">
+                                    {cropHistoryDrafts.map((draft, index) => (
+                                        <fieldset className="crop-history-draft" key={index}>
+                                            <legend>{t('cropHistoryCropName', lang)} {cropHistoryDrafts.length > 1 ? `#${index + 1}` : ''}</legend>
+                                            <div className="crop-history-form-grid">
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-year-${index}`}>{t('cropHistoryYear', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-year-${index}`}
+                                                        type="number"
+                                                        min="1900"
+                                                        max={new Date().getFullYear()}
+                                                        value={draft.year}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'year', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-name-${index}`}>{t('cropHistoryCropName', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-name-${index}`}
+                                                        type="text"
+                                                        list="crop-history-crop-options"
+                                                        maxLength={100}
+                                                        value={draft.crop_name}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'crop_name', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-season-${index}`}>{t('cropHistorySeason', lang)}</label>
+                                                    <select
+                                                        id={`crop-history-season-${index}`}
+                                                        value={draft.season}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'season', event.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="Kharif">{t('cropHistoryKharif', lang)}</option>
+                                                        <option value="Rabi">{t('cropHistoryRabi', lang)}</option>
+                                                        <option value="Summer">{t('cropHistorySummer', lang)}</option>
+                                                        <option value="Year-round">{t('cropHistoryYearRound', lang)}</option>
+                                                        <option value="Other">{t('cropHistoryOther', lang)}</option>
+                                                    </select>
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-area-${index}`}>{t('cropHistoryArea', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-area-${index}`}
+                                                        type="number"
+                                                        min="0.01"
+                                                        step="0.01"
+                                                        value={draft.cultivated_area_acres}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'cultivated_area_acres', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-yield-${index}`}>{t('cropHistoryYield', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-yield-${index}`}
+                                                        type="number"
+                                                        min="0"
+                                                        step="any"
+                                                        value={draft.yield_quantity}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'yield_quantity', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-unit-${index}`}>{t('cropHistoryYieldUnit', lang)}</label>
+                                                    <select
+                                                        id={`crop-history-unit-${index}`}
+                                                        value={draft.yield_unit}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'yield_unit', event.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="kg">kg</option>
+                                                        <option value="quintals">Quintals</option>
+                                                        <option value="tonnes">Tonnes</option>
+                                                    </select>
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-soil-${index}`}>{t('cropHistorySoilType', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-soil-${index}`}
+                                                        type="text"
+                                                        maxLength={100}
+                                                        value={draft.soil_type}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'soil_type', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-ph-${index}`}>{t('cropHistorySoilPH', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-ph-${index}`}
+                                                        type="number"
+                                                        min="0"
+                                                        max="14"
+                                                        step="0.1"
+                                                        value={draft.soil_ph}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'soil_ph', event.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-irrigation-${index}`}>{t('cropHistoryIrrigation', lang)}</label>
+                                                    <select
+                                                        id={`crop-history-irrigation-${index}`}
+                                                        value={draft.irrigation_type}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'irrigation_type', event.target.value)}
+                                                        required
+                                                    >
+                                                        <option value="Rainfed">{t('cropHistoryRainfed', lang)}</option>
+                                                        <option value="Drip">{t('cropHistoryDrip', lang)}</option>
+                                                        <option value="Sprinkler">{t('cropHistorySprinkler', lang)}</option>
+                                                        <option value="Canal">{t('cropHistoryCanal', lang)}</option>
+                                                        <option value="Borewell">{t('cropHistoryBorewell', lang)}</option>
+                                                        <option value="Other">{t('cropHistoryOther', lang)}</option>
+                                                    </select>
+                                                </div>
+                                                <div className="edit-field">
+                                                    <label htmlFor={`crop-history-profit-${index}`}>{t('cropHistoryProfit', lang)}</label>
+                                                    <input
+                                                        id={`crop-history-profit-${index}`}
+                                                        type="number"
+                                                        step="any"
+                                                        value={draft.profit}
+                                                        onChange={event => handleCropHistoryDraftChange(index, 'profit', event.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </fieldset>
+                                    ))}
+                                </div>
+
+                                <datalist id="crop-history-crop-options">
+                                    {availableCrops.map(crop => <option key={crop} value={crop} />)}
+                                </datalist>
+
+                                {cropHistoryError && <p className="crop-history-error" role="alert">{cropHistoryError}</p>}
+
+                                <div className="crop-history-modal-actions">
+                                    {!editingCropHistoryId && cropHistoryDrafts.length < 25 && (
+                                        <button
+                                            type="button"
+                                            className="crop-history-view-btn"
+                                            onClick={() => setCropHistoryDrafts(current => [...current, createCropHistoryDraft()])}
+                                        >
+                                            {t('addAnotherCrop', lang)}
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="edit-cancel-btn"
+                                        onClick={() => setShowCropHistoryForm(false)}
+                                        disabled={savingCropHistory}
+                                    >
+                                        {t('cropHistoryCancel', lang)}
+                                    </button>
+                                    <button type="submit" className="edit-save-btn" disabled={savingCropHistory}>
+                                        {savingCropHistory ? t('cropHistorySaving', lang) : t(editingCropHistoryId ? 'cropHistoryUpdate' : 'cropHistorySave', lang)}
+                                    </button>
+                                </div>
+                            </form>
+                        </section>
                     </div>
                 )}
 
@@ -2713,7 +2939,7 @@ function App() {
                                         <h3>{getCropName(varietyModalCrop, lang)} — {t('modalTitle', lang)}</h3>
                                         <p className="modal-crop-subtitle">
                                             {varietyModalData?.botanical_genus && (
-                                                <span><strong>Botanical Name:</strong> <em>{varietyModalData.botanical_genus}</em> • </span>
+                                                <span><strong>{t('botanicalName', lang)}:</strong> <em>{varietyModalData.botanical_genus}</em> • </span>
                                             )}
                                             <span><strong>{varietyModalData?.varieties_count || 0}</strong> {t('varietiesAvailable', lang)}</span>
                                             {varietyModalData?.price_range && (
@@ -2730,7 +2956,7 @@ function App() {
                                 <div className="modal-search-box">
                                     <input
                                         type="text"
-                                        placeholder="Search by variety name, traits, or soil..."
+                                        placeholder={t('searchVarietyPlaceholder', lang)}
                                         value={varietySearchQuery}
                                         onChange={(e) => setVarietySearchQuery(e.target.value)}
                                     />
@@ -2767,7 +2993,7 @@ function App() {
                                 </div>
 
                                 <div className="modal-sort-box">
-                                    <label>Sort:</label>
+                                    <label>{t('sort', lang)}</label>
                                     <select value={varietySortBy} onChange={(e) => setVarietySortBy(e.target.value)}>
                                         <option value="match">{t('sortByMatch', lang)}</option>
                                         <option value="yield">{t('sortByYield', lang)}</option>
@@ -2782,7 +3008,7 @@ function App() {
                                 {loadingVarietyModal ? (
                                     <div className="variety-modal-loading">
                                         <span className="spinner"></span>
-                                        <p>Loading cultivars and agronomic data...</p>
+                                        <p>{t('loadingCultivars', lang)}</p>
                                     </div>
                                 ) : (
                                     (() => {
@@ -2884,15 +3110,32 @@ function App() {
                                                         <div key={v.name} className={`modal-variety-card ${isSelectedVar ? 'selected-card' : ''}`}>
                                                             {/* Top Banner Image with Overlay */}
                                                             <div className="modal-var-image-wrap">
-                                                                <img
-                                                                    src={v.image_url || varietyModalData?.crop_image || 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=700&q=80'}
-                                                                    alt={v.name}
-                                                                    className="modal-var-img"
-                                                                    onError={(e: any) => {
-                                                                        e.target.onerror = null;
-                                                                        e.target.src = 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&w=700&q=80';
-                                                                    }}
-                                                                />
+                                                                <div className="modal-var-image-fallback" aria-hidden="true">
+                                                                    <span>{getCropIcon(varietyModalData?.crop || varietyModalCrop || '', '🌱')}</span>
+                                                                    <strong>{getCropName(varietyModalData?.crop || varietyModalCrop || '', lang)}</strong>
+                                                                </div>
+                                                                {varietyModalData?.crop_image && (
+                                                                    <img
+                                                                        src={v.image_url || varietyModalData.crop_image}
+                                                                        alt={`${getCropName(varietyModalData.crop, lang)} - ${v.name}`}
+                                                                        className="modal-var-img"
+                                                                        onError={(event) => {
+                                                                            event.currentTarget.style.display = 'none';
+                                                                        }}
+                                                                    />
+                                                                )}
+                                                                {v.image_credit && v.image_source && (
+                                                                    <a
+                                                                        className="variety-image-credit"
+                                                                        href={v.image_source}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        aria-label={`Photo credit: ${v.image_credit}`}
+                                                                        title={v.image_credit}
+                                                                    >
+                                                                        {v.image_credit}
+                                                                    </a>
+                                                                )}
                                                                 <div className="modal-var-img-overlay">
                                                                     <span className="var-rank-badge">#{idx + 1}</span>
                                                                     <span className="var-suitability-tag">
@@ -2924,44 +3167,9 @@ function App() {
                                                                     </div>
                                                                 )}
 
-                                                                {/* Agronomic Specifications Table */}
-                                                                <div className="modal-var-spec-grid">
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('soilRequirements', lang)}:</span>
-                                                                        <span className="spec-value">{v.soil_type || 'Loamy / Red Soil'}</span>
-                                                                        {v.soil_ph_range && (
-                                                                            <span className="spec-sub">Optimal pH: {v.soil_ph_range[0]} - {v.soil_ph_range[1]}</span>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('climateRequirements', lang)}:</span>
-                                                                        <span className="spec-value">{v.climate ? (v.climate.length > 55 ? v.climate.substring(0, 55) + '...' : v.climate) : 'Tropical humid'}</span>
-                                                                        <span className="spec-sub">{v.min_temp}°C - {v.max_temp}°C • {v.rainfall_range?.[0]}-{v.rainfall_range?.[1]} mm</span>
-                                                                    </div>
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('growingSeason', lang)}:</span>
-                                                                        <span className="spec-value">{v.growing_months || v.season}</span>
-                                                                    </div>
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('maturityPeriod', lang)}:</span>
-                                                                        <span className="spec-value">{v.maturity_period || `${v.duration_days} days`}</span>
-                                                                    </div>
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('expectedYieldLabel', lang)}:</span>
-                                                                        <span className="spec-value highlight-yield">{v.expected_yield || `${v.yield_per_acre} ${varietyModalData?.unit || 'q'}/acre`}</span>
-                                                                    </div>
-                                                                    <div className="var-spec-item">
-                                                                        <span className="spec-label">{t('bestRegionsLabel', lang)}:</span>
-                                                                        <span className="spec-value">{(v.best_regions || []).slice(0, 3).join(', ')}</span>
-                                                                    </div>
-                                                                </div>
 
-                                                                {/* Agronomic Characteristics Notes */}
-                                                                {v.characteristics && (
-                                                                    <p className="modal-var-desc">
-                                                                        <strong>Agronomic Note:</strong> {v.characteristics}
-                                                                    </p>
-                                                                )}
+
+
 
                                                                 {/* Action Button */}
                                                                 <button
@@ -2985,7 +3193,7 @@ function App() {
                                                                         }, 200);
                                                                     }}
                                                                 >
-                                                                    {isSelectedVar ? 'Selected for Estimator' : t('selectVarietyForProfit', lang)}
+                                                                    {isSelectedVar ? t('selectedForEstimator', lang) : t('selectVarietyForProfit', lang)}
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -3000,6 +3208,7 @@ function App() {
                     </div>
                 )}
             </main>
+            </div>
         </div>
     );
 }

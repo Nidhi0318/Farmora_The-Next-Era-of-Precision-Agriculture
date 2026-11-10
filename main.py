@@ -1,46 +1,207 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
+from datetime import date
 import json
 import os
 import csv
 import io
 import math
 import sqlite3
+import secrets
 import requests
+import pymysql
+import random
+from collections import deque
+
+RECENT_SURVEY_FARMERS = deque(maxlen=64)
+CROP_HISTORY_SESSIONS: dict[str, int] = {}
+
+# MySQL Workbench configuration
+MYSQL_CONFIG = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "MySQL@2026",
+    "database": "farmer_portal",
+    "charset": "utf8mb4",
+    "autocommit": True
+}
+
+def get_db_connection():
+    """
+    Returns an active database connection to MySQL Workbench.
+    Falls back to SQLite if MySQL service is unreachable.
+    """
+    try:
+        conn = pymysql.connect(**MYSQL_CONFIG)
+        return conn, "mysql"
+    except Exception as e:
+        print(f"MySQL connection warning: {e}. Falling back to SQLite.")
+        conn = sqlite3.connect("farmer_portal.db")
+        return conn, "sqlite"
 
 def init_db():
-    conn = sqlite3.connect("farmer_portal.db")
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS farmers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT,
-            survey_number TEXT,
-            phone_number TEXT,
-            state TEXT,
-            district TEXT,
-            taluk TEXT,
-            hobli TEXT,
-            password TEXT
+    # 1. Initialize MySQL Workbench database and tables
+    try:
+        server_conn = pymysql.connect(
+            host="localhost",
+            port=3306,
+            user="root",
+            password="MySQL@2026",
+            charset="utf8mb4",
+            autocommit=True
         )
-    ''')
-    # Migrations for new columns
-    columns_to_add = [
-        ('password', 'TEXT'),
-        ('land_area_acres', 'REAL'),
-        ('land_area_guntas', 'REAL'),
-        ('aadhaar_number', 'TEXT')
-    ]
-    for col_name, col_type in columns_to_add:
-        try:
-            cursor.execute(f'ALTER TABLE farmers ADD COLUMN {col_name} {col_type}')
-            print(f"Added '{col_name}' column to farmers table.")
-        except sqlite3.OperationalError:
-            pass
-    conn.commit()
-    conn.close()
+        s_cur = server_conn.cursor()
+        s_cur.execute("CREATE DATABASE IF NOT EXISTS farmer_portal")
+        server_conn.close()
+
+        my_conn = pymysql.connect(**MYSQL_CONFIG)
+        cursor = my_conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS farmers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255),
+                aadhaar_number VARCHAR(50),
+                survey_number VARCHAR(100),
+                phone_number VARCHAR(50),
+                state VARCHAR(100),
+                district VARCHAR(100),
+                taluk VARCHAR(100),
+                hobli VARCHAR(100),
+                password VARCHAR(255),
+                land_area_acres DOUBLE DEFAULT 0.0,
+                land_area_guntas DOUBLE DEFAULT 0.0,
+                primary_crop VARCHAR(100) DEFAULT 'Rice',
+                soil_type VARCHAR(100) DEFAULT 'Laterite Soil',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS farmer_crop_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                farmer_id INT NOT NULL,
+                year INT NOT NULL,
+                crop_name VARCHAR(100) NOT NULL,
+                season VARCHAR(50) NOT NULL,
+                cultivated_area_acres DOUBLE NOT NULL,
+                yield_quantity DOUBLE NOT NULL,
+                yield_unit VARCHAR(30) NOT NULL DEFAULT 'kg',
+                soil_type VARCHAR(100) NOT NULL,
+                soil_ph DOUBLE NOT NULL,
+                irrigation_type VARCHAR(100) NOT NULL,
+                profit DOUBLE NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_farmer_crop_history_farmer_year (farmer_id, year),
+                CONSTRAINT fk_crop_history_farmer FOREIGN KEY (farmer_id) REFERENCES farmers(id) ON DELETE CASCADE
+            )
+        ''')
+
+        # Ensure extra columns exist if table was previously created
+        my_cols_to_add = [
+            ('primary_crop', "VARCHAR(100) DEFAULT 'Rice'"),
+            ('soil_type', "VARCHAR(100) DEFAULT 'Laterite Soil'"),
+            ('created_at', "DATETIME DEFAULT CURRENT_TIMESTAMP"),
+            ('updated_at', "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+        ]
+        for col_name, col_type in my_cols_to_add:
+            try:
+                cursor.execute(f'ALTER TABLE farmers ADD COLUMN {col_name} {col_type}')
+            except Exception:
+                pass
+
+        # Auto-migrate records from existing SQLite db to MySQL if available
+        if os.path.exists("farmer_portal.db"):
+            try:
+                s_conn = sqlite3.connect("farmer_portal.db")
+                s_cur = s_conn.cursor()
+                s_cur.execute("SELECT name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas FROM farmers")
+                rows = s_cur.fetchall()
+                for row in rows:
+                    if row[0]:
+                        cursor.execute("SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER(%s)", (row[0].strip(),))
+                        if not cursor.fetchone():
+                            cursor.execute('''
+                                INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            ''', row)
+                s_conn.close()
+            except Exception as mig_err:
+                print(f"Notice: SQLite migration to MySQL: {mig_err}")
+
+        my_conn.close()
+        print("Connected to MySQL Workbench (farmer_portal) successfully!")
+    except Exception as e:
+        print(f"Warning: Could not connect to MySQL Workbench: {e}. Setting up SQLite fallback.")
+
+    # 2. Also ensure SQLite fallback table exists
+    try:
+        conn = sqlite3.connect("farmer_portal.db")
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS farmers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                survey_number TEXT,
+                phone_number TEXT,
+                state TEXT,
+                district TEXT,
+                taluk TEXT,
+                hobli TEXT,
+                password TEXT,
+                land_area_acres REAL DEFAULT 0.0,
+                land_area_guntas REAL DEFAULT 0.0,
+                aadhaar_number TEXT,
+                primary_crop TEXT DEFAULT 'Rice',
+                soil_type TEXT DEFAULT 'Laterite Soil',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS farmer_crop_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                farmer_id INTEGER NOT NULL REFERENCES farmers(id) ON DELETE CASCADE,
+                year INTEGER NOT NULL,
+                crop_name TEXT NOT NULL,
+                season TEXT NOT NULL,
+                cultivated_area_acres REAL NOT NULL,
+                yield_quantity REAL NOT NULL,
+                yield_unit TEXT NOT NULL DEFAULT 'kg',
+                soil_type TEXT NOT NULL,
+                soil_ph REAL NOT NULL,
+                irrigation_type TEXT NOT NULL,
+                profit REAL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_farmer_crop_history_farmer_year
+            ON farmer_crop_history (farmer_id, year)
+        ''')
+        columns_to_add = [
+            ('password', 'TEXT'),
+            ('land_area_acres', 'REAL'),
+            ('land_area_guntas', 'REAL'),
+            ('aadhaar_number', 'TEXT'),
+            ('primary_crop', 'TEXT'),
+            ('soil_type', 'TEXT'),
+            ('created_at', 'TEXT'),
+            ('updated_at', 'TEXT')
+        ]
+        for col_name, col_type in columns_to_add:
+            try:
+                cursor.execute(f'ALTER TABLE farmers ADD COLUMN {col_name} {col_type}')
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"SQLite init note: {e}")
 
 init_db()
 
@@ -2226,36 +2387,163 @@ def get_soil_data_from_csv():
     
     return {"ph": avg_ph, "soil_type": most_common_soil}
 
-def get_recommendations_from_csv(ph, temp, rainfall, humidity=None):
-    """Find best matching crops based on pH, Temperature, Rainfall, and Humidity using a scoring algorithm."""
-    scores = {} # Store best match score for each crop type
+# Regional Agro-Climatic Zones & District Suitability Mapping for Karnataka & Neighboring States
+KARNATAKA_DISTRICT_CROPS = {
+    # ── Coastal Karnataka (High rainfall, laterite soil, acidic pH, humid) ──
+    "Dakshina Kannada": ["Rice", "Arecanut", "Coconut", "Cashew", "Rubber", "Banana", "Pepper", "Ginger", "Turmeric"],
+    "Udupi": ["Rice", "Arecanut", "Coconut", "Cashew", "Banana", "Pepper", "Ginger", "Turmeric", "Rubber"],
+    "Uttara Kannada": ["Rice", "Arecanut", "Coconut", "Cashew", "Banana", "Pepper", "Cardamom", "Ginger", "Turmeric"],
+
+    # ── Hilly / Malnad Karnataka (High elevation, cooler temp, heavy rainfall) ──
+    "Chikkamagaluru": ["Coffee", "Cardamom", "Arecanut", "Pepper", "Ginger", "Rice", "Banana", "Turmeric"],
+    "Kodagu": ["Coffee", "Cardamom", "Pepper", "Rice", "Banana", "Ginger", "Rubber", "Turmeric"],
+    "Hassan": ["Coffee", "Cardamom", "Potato", "Ragi", "Maize", "Pepper", "Ginger", "Coconut", "Banana"],
+    "Shivamogga": ["Arecanut", "Rice", "Ginger", "Pepper", "Banana", "Maize", "Coconut", "Turmeric"],
+
+    # ── Northern Dry Karnataka (Low rainfall, black cotton soil, high heat) ──
+    "Bagalkot": ["Jowar", "Bengal Gram", "Sugarcane", "Maize", "Pomegranate", "Onion", "Chilli", "Wheat", "Cotton"],
+    "Ballari": ["Cotton", "Chilli", "Jowar", "Bengal Gram", "Maize", "Groundnut", "Rice", "Pomegranate"],
+    "Bidar": ["Bengal Gram", "Red Gram", "Jowar", "Sugarcane", "Wheat", "Maize", "Chilli"],
+    "Gadag": ["Bengal Gram", "Jowar", "Cotton", "Maize", "Chilli", "Groundnut", "Wheat", "Onion"],
+    "Kalaburagi": ["Red Gram", "Bengal Gram", "Jowar", "Wheat", "Cotton", "Sugarcane", "Maize"],
+    "Koppal": ["Rice", "Jowar", "Bengal Gram", "Maize", "Pomegranate", "Chilli", "Groundnut", "Cotton"],
+    "Raichur": ["Rice", "Cotton", "Chilli", "Jowar", "Bengal Gram", "Groundnut", "Red Gram"],
+    "Vijayapura": ["Jowar", "Bengal Gram", "Pomegranate", "Wheat", "Maize", "Chilli", "Sugarcane", "Cotton"],
+    "Yadgir": ["Red Gram", "Rice", "Jowar", "Bengal Gram", "Cotton", "Groundnut"],
+    "Vijayanagara": ["Cotton", "Chilli", "Maize", "Sugarcane", "Jowar", "Bengal Gram", "Pomegranate"],
+
+    # ── Northern Transition Karnataka (Moderate rainfall, transitional soils) ──
+    "Belagavi": ["Sugarcane", "Maize", "Cotton", "Jowar", "Bengal Gram", "Groundnut", "Chilli", "Tomato", "Wheat", "Rice"],
+    "Dharwad": ["Cotton", "Maize", "Bengal Gram", "Jowar", "Chilli", "Groundnut", "Wheat", "Onion", "Tomato"],
+    "Haveri": ["Maize", "Chilli", "Cotton", "Groundnut", "Jowar", "Bengal Gram", "Sugarcane", "Tomato"],
+    "Davanagere": ["Maize", "Rice", "Sugarcane", "Cotton", "Arecanut", "Tomato", "Chilli", "Groundnut"],
+
+    # ── Southern Dry & Central Karnataka (Red sandy/loamy, moderate rainfall) ──
+    "Chitradurga": ["Groundnut", "Ragi", "Maize", "Arecanut", "Pomegranate", "Cotton", "Onion", "Chilli"],
+    "Tumakuru": ["Coconut", "Arecanut", "Ragi", "Groundnut", "Maize", "Mango", "Tomato"],
+    "Mandya": ["Sugarcane", "Rice", "Ragi", "Coconut", "Banana", "Tomato", "Maize"],
+    "Mysuru": ["Rice", "Ragi", "Cotton", "Sugarcane", "Banana", "Maize", "Ginger", "Turmeric"],
+    "Chamarajanagar": ["Turmeric", "Banana", "Sugarcane", "Ragi", "Maize", "Groundnut", "Cotton", "Chilli"],
+
+    # ── Eastern Dry & Bengaluru Transition (Red soils, plateau climate) ──
+    "Bengaluru Rural": ["Ragi", "Tomato", "Potato", "Mango", "Maize", "Groundnut", "Banana"],
+    "Bengaluru Urban": ["Ragi", "Tomato", "Potato", "Mango", "Banana", "Maize"],
+    "Kolar": ["Tomato", "Mango", "Potato", "Ragi", "Groundnut", "Chilli", "Maize"],
+    "Chikkaballapur": ["Tomato", "Potato", "Mango", "Ragi", "Maize", "Groundnut", "Pomegranate"],
+    "Ramanagara": ["Ragi", "Mango", "Coconut", "Banana", "Tomato", "Turmeric", "Maize"],
+}
+
+def get_allowed_crops_for_district(district: str) -> List[str]:
+    """Returns valid agronomic crops strictly suitable for a given district."""
+    if not district:
+        return list(CROP_PROFILES.keys())
+    
+    # Check exact match
+    if district in KARNATAKA_DISTRICT_CROPS:
+        return KARNATAKA_DISTRICT_CROPS[district]
+    
+    # Case insensitive match
+    for d_name, crops in KARNATAKA_DISTRICT_CROPS.items():
+        if d_name.lower() == district.lower():
+            return crops
+            
+    # Kerala districts
+    kerala_districts = ["Thiruvananthapuram", "Ernakulam", "Palakkad", "Kozhikode", "Wayanad", "Idukki", "Kasaragod", "Thrissur", "Malappuram", "Kollam", "Kottayam", "Alappuzha", "Kannur"]
+    if any(k.lower() == district.lower() for k in kerala_districts):
+        return ["Rubber", "Coffee", "Cardamom", "Pepper", "Coconut", "Rice", "Banana", "Ginger", "Turmeric", "Cashew"]
+
+    # Tamil Nadu districts
+    tamil_districts = ["Chennai", "Coimbatore", "Madurai", "Salem", "Thanjavur", "Tiruchirappalli", "Tirunelveli", "Erode", "Nilgiris", "Dindigul", "Tiruppur"]
+    if any(k.lower() == district.lower() for k in tamil_districts):
+        return ["Rice", "Sugarcane", "Cotton", "Banana", "Coconut", "Groundnut", "Maize", "Turmeric", "Tomato", "Chilli"]
+
+    # Maharashtra / Dry zones
+    maha_districts = ["Pune", "Nagpur", "Nashik", "Kolhapur", "Aurangabad", "Solapur", "Satara", "Sangli", "Ratnagiri"]
+    if any(k.lower() == district.lower() for k in maha_districts):
+        return ["Sugarcane", "Cotton", "Jowar", "Bengal Gram", "Wheat", "Pomegranate", "Onion", "Tomato", "Groundnut"]
+
+    # Fallback to all profiles
+    return list(CROP_PROFILES.keys())
+
+def get_recommendations_from_csv(ph, temp, rainfall, humidity=None, district=None, taluk=None, soil_type=None):
+    """
+    Find best matching crops based on regional suitability, 
+    soil pH, Temperature, Rainfall, and Humidity using a calibrated multi-parameter scoring model.
+    """
+    scores = {}
     target_humidity = humidity if humidity is not None else 85.0
     
+    # Determine district from taluk if not directly provided
+    resolved_district = district
+    if not resolved_district and taluk:
+        resolved_district = get_district_for_taluk(taluk)
+    
+    allowed_crops = get_allowed_crops_for_district(resolved_district)
+    
+    # Preferred soils mapping for bonus scoring
+    crop_soil_preferences = {
+        "Rice": ["Laterite", "Alluvial", "Clay Loam", "Red Sandy"],
+        "Arecanut": ["Laterite", "Red Loam", "Clay Loam", "Dark Hilly"],
+        "Coconut": ["Laterite", "Coastal Alluvial", "Red Sandy", "Alluvial"],
+        "Cashew": ["Laterite", "Red Sandy"],
+        "Rubber": ["Laterite", "Dark Hilly", "Red Loamy"],
+        "Pepper": ["Laterite", "Dark Hilly", "Red Loam"],
+        "Cardamom": ["Dark Hilly", "Forest Loam", "Red Clayey"],
+        "Coffee": ["Dark Hilly", "Red Clayey", "Forest Loam", "Laterite"],
+        "Banana": ["Alluvial", "Laterite", "Red Loam", "Clay Loam"],
+        "Ginger": ["Laterite", "Red Loamy", "Sandy Loam"],
+        "Turmeric": ["Red Loamy", "Alluvial", "Laterite"],
+        "Jowar": ["Black Cotton", "Deep Black", "Black Clayey", "Mixed Red & Black"],
+        "Cotton": ["Black Cotton", "Deep Black", "Black Clayey"],
+        "Bengal Gram": ["Black Cotton", "Deep Black", "Black Clayey"],
+        "Red Gram": ["Red Loamy", "Black Cotton", "Mixed Red & Black", "Red Sandy"],
+        "Wheat": ["Black Cotton", "Alluvial", "Deep Black"],
+        "Pomegranate": ["Black Cotton", "Mixed Red & Black", "Red Sandy"],
+        "Ragi": ["Red Sandy", "Red Loam", "Laterite"],
+        "Groundnut": ["Red Sandy", "Red Loam", "Sandy Loam"],
+        "Sugarcane": ["Black Cotton", "Alluvial", "Red Loam"],
+        "Tomato": ["Red Loam", "Red Sandy", "Alluvial"],
+        "Chilli": ["Black Cotton", "Red Loamy", "Mixed Red & Black"],
+        "Onion": ["Red Loam", "Black Cotton", "Sandy Loam"],
+        "Potato": ["Red Loamy", "Red Sandy", "Sandy Loam"],
+        "Mango": ["Red Sandy", "Red Loam", "Laterite"],
+    }
+    
     try:
-        for crop, profile in CROP_PROFILES.items():
+        for crop in allowed_crops:
+            if crop not in CROP_PROFILES:
+                continue
+            profile = CROP_PROFILES[crop]
             row_ph = profile["ph"]
             row_temp = profile["temp"]
             row_hum = profile["humidity"]
             row_rainfall = profile["rainfall"]
             
-            # Normalized distances (weighted)
+            # Normalized agronomic distances (weighted)
             # pH: range 4-9 (5) | Temp: 15-40 (25) | Hum: 30-100 (70) | Rain: 500-5000 (4500)
-            d_ph = (abs(row_ph - ph) / 5.0) * 0.1
-            d_temp = (abs(row_temp - temp) / 25.0) * 0.3
-            d_hum = (abs(row_hum - target_humidity) / 70.0) * 0.3
-            d_rain = (abs(row_rainfall - rainfall) / 4500.0) * 0.3
+            d_ph = (abs(row_ph - ph) / 5.0) * 0.25
+            d_temp = (abs(row_temp - temp) / 25.0) * 0.25
+            d_hum = (abs(row_hum - target_humidity) / 70.0) * 0.20
+            d_rain = (abs(row_rainfall - rainfall) / 4500.0) * 0.30
             
-            # Similarity score
             distance = (d_ph**2 + d_temp**2 + d_hum**2 + d_rain**2)**0.5
-            score = 1.0 / (1.0 + distance)
-            scores[crop] = score
+            base_score = 1.0 / (1.0 + distance)
+            
+            # Soil type affinity bonus
+            soil_bonus = 0.0
+            if soil_type:
+                preferred = crop_soil_preferences.get(crop, [])
+                if any(p.lower() in soil_type.lower() or soil_type.lower() in p.lower() for p in preferred):
+                    soil_bonus = 0.15
+                    
+            scores[crop] = base_score + soil_bonus
             
     except Exception as e:
         print(f"Error in recommendation logic: {e}")
-        return ["Rice", "Arecanut", "Banana"]
+        return allowed_crops[:5] if allowed_crops else ["Rice", "Arecanut", "Banana"]
 
     if not scores:
-        return ["Coconut", "Arecanut", "Pepper"]
+        return allowed_crops[:5] if allowed_crops else ["Coconut", "Arecanut", "Pepper"]
     
     # Return Top 5 unique crops sorted by score
     recommended = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -2338,7 +2626,7 @@ def get_avg_yield_for_crop(crop):
 # Models
 class RegistrationRequest(BaseModel):
     name: str
-    aadhaar_number: str
+    aadhaar_number: Optional[str] = ""
     survey_number: str
     phone_number: str
     state: str
@@ -2348,84 +2636,556 @@ class RegistrationRequest(BaseModel):
     password: str
     land_area_acres: float = 0.0
     land_area_guntas: float = 0.0
+    primary_crop: Optional[str] = None
+    soil_type: Optional[str] = None
 
 class LoginRequest(BaseModel):
     name: str
     password: str
 
+class CropHistoryEntry(BaseModel):
+    year: int = Field(ge=1900, le=date.today().year)
+    crop_name: str = Field(min_length=1, max_length=100)
+    season: str = Field(min_length=1, max_length=50)
+    cultivated_area_acres: float = Field(gt=0, allow_inf_nan=False)
+    yield_quantity: float = Field(ge=0, allow_inf_nan=False)
+    yield_unit: str = Field(default="kg", min_length=1, max_length=30)
+    soil_type: str = Field(min_length=1, max_length=100)
+    soil_ph: float = Field(ge=0, le=14, allow_inf_nan=False)
+    irrigation_type: str = Field(min_length=1, max_length=100)
+    profit: Optional[float] = Field(default=None, allow_inf_nan=False)
+
+class CropHistoryBatch(BaseModel):
+    records: List[CropHistoryEntry] = Field(min_length=1, max_length=25)
+
+class UpdateFarmerRequest(BaseModel):
+    current_name: Optional[str] = None
+    name: Optional[str] = None
+    phone_number: Optional[str] = None
+    survey_number: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    taluk: Optional[str] = None
+    hobli: Optional[str] = None
+    land_area_acres: Optional[float] = None
+    land_area_guntas: Optional[float] = None
+    primary_crop: Optional[str] = None
+    soil_type: Optional[str] = None
+
 @app.post("/register")
 async def register_farmer(reg: RegistrationRequest):
+    clean_name = reg.name.strip()
+    clean_phone = reg.phone_number.strip()
+    clean_survey = reg.survey_number.strip()
+    clean_state = reg.state.strip() or "Karnataka"
+    clean_district = reg.district.strip() or "Dakshina Kannada"
+    clean_taluk = reg.taluk.strip() or "Mangaluru"
+    clean_hobli = reg.hobli.strip() or "Kasaba"
+    clean_pass = reg.password.strip()
+    acres = float(reg.land_area_acres or 0.0)
+    guntas = float(reg.land_area_guntas or 0.0)
+
+    # Determine regional default primary crop and soil type if missing
+    regional_crops = {
+        "Mangaluru": "Rice", "Bantwal": "Arecanut", "Puttur": "Arecanut",
+        "Belthangady": "Rubber", "Sullia": "Rubber", "Udupi": "Rice",
+        "Kundapura": "Cashew", "Karkala": "Pepper", "Karwar": "Rice",
+        "Sirsi": "Arecanut", "Kumta": "Coconut", "Honnavar": "Rice",
+        "Harihar": "Ragi", "Davanagere": "Maize", "Bengaluru": "Ragi",
+        "Mysuru": "Rice", "Mandya": "Sugarcane", "Hassan": "Coffee"
+    }
+    prim_crop = reg.primary_crop or regional_crops.get(clean_taluk, "Rice")
+    soil = reg.soil_type or DISTRICT_BASELINES.get(clean_district, {}).get("soil_type", "Laterite Soil")
+
     try:
-        conn = sqlite3.connect("farmer_portal.db")
+        conn, db_type = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (reg.name, reg.aadhaar_number, reg.survey_number, reg.phone_number, reg.state, reg.district, reg.taluk, reg.hobli, reg.password, reg.land_area_acres, reg.land_area_guntas))
-        conn.commit()
+        p = "%s" if db_type == "mysql" else "?"
+
+        # Check if farmer already exists in MySQL Workbench (or fallback)
+        cursor.execute(
+            f"SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER({p}) OR (phone_number != '' AND phone_number = {p})",
+            (clean_name, clean_phone)
+        )
+        existing = cursor.fetchone()
+
+        if existing:
+            fid = existing[0]
+            cursor.execute(f'''
+                UPDATE farmers
+                SET name={p}, aadhaar_number={p}, survey_number={p}, phone_number={p},
+                    state={p}, district={p}, taluk={p}, hobli={p}, password={p},
+                    land_area_acres={p}, land_area_guntas={p}, primary_crop={p}, soil_type={p}
+                WHERE id={p}
+            ''', (clean_name, reg.aadhaar_number or "", clean_survey, clean_phone, clean_state, clean_district, clean_taluk, clean_hobli, clean_pass, acres, guntas, prim_crop, soil, fid))
+        else:
+            cursor.execute(f'''
+                INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas, primary_crop, soil_type)
+                VALUES ({", ".join([p] * 13)})
+            ''', (clean_name, reg.aadhaar_number or "", clean_survey, clean_phone, clean_state, clean_district, clean_taluk, clean_hobli, clean_pass, acres, guntas, prim_crop, soil))
+            fid = cursor.lastrowid
+
+        if hasattr(conn, "commit"):
+            conn.commit()
         conn.close()
-        return {"status": "success", "message": "Farmer registered successfully"}
+
+        # Mirror to SQLite if connected to MySQL so backup stays synced
+        if db_type == "mysql" and os.path.exists("farmer_portal.db"):
+            try:
+                s_conn = sqlite3.connect("farmer_portal.db")
+                s_cur = s_conn.cursor()
+                s_cur.execute("SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER(?) OR (phone_number != '' AND phone_number = ?)", (clean_name, clean_phone))
+                s_exist = s_cur.fetchone()
+                if s_exist:
+                    s_cur.execute('''
+                        UPDATE farmers
+                        SET name=?, aadhaar_number=?, survey_number=?, phone_number=?, state=?, district=?, taluk=?, hobli=?, password=?, land_area_acres=?, land_area_guntas=?, primary_crop=?, soil_type=?
+                        WHERE id=?
+                    ''', (clean_name, reg.aadhaar_number or "", clean_survey, clean_phone, clean_state, clean_district, clean_taluk, clean_hobli, clean_pass, acres, guntas, prim_crop, soil, s_exist[0]))
+                else:
+                    s_cur.execute('''
+                        INSERT INTO farmers (name, aadhaar_number, survey_number, phone_number, state, district, taluk, hobli, password, land_area_acres, land_area_guntas, primary_crop, soil_type)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (clean_name, reg.aadhaar_number or "", clean_survey, clean_phone, clean_state, clean_district, clean_taluk, clean_hobli, clean_pass, acres, guntas, prim_crop, soil))
+                s_conn.commit()
+                s_conn.close()
+            except Exception as se:
+                print(f"SQLite shadow sync notice: {se}")
+
+        return {
+            "status": "success",
+            "message": "Farmer registered successfully in MySQL Workbench",
+            "database": "MySQL Workbench (farmer_portal)" if db_type == "mysql" else "SQLite fallback",
+            "farmer_id": fid,
+            "name": clean_name
+        }
     except Exception as e:
         print(f"Registration error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/login")
 async def login_farmer(login: LoginRequest):
+    clean_name = login.name.strip()
+    clean_pass = login.password.strip()
     try:
-        conn = sqlite3.connect("farmer_portal.db")
+        conn, db_type = get_db_connection()
         cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
         
-        # First check if user exists
-        cursor.execute("SELECT name FROM farmers WHERE name = ?", (login.name,))
-        if not cursor.fetchone():
-            conn.close()
-            raise HTTPException(status_code=404, detail="Name incorrect or not found")
-            
-        # Then check password
-        cursor.execute("SELECT name, taluk, district, aadhaar_number, survey_number, phone_number, land_area_acres, land_area_guntas FROM farmers WHERE name = ? AND password = ?", (login.name, login.password))
-        user = cursor.fetchone()
+        # Check if user exists by Name OR Phone Number
+        cursor.execute(
+            f"SELECT id, name, taluk, district, state, hobli, aadhaar_number, survey_number, phone_number, land_area_acres, land_area_guntas, primary_crop, soil_type, password FROM farmers WHERE LOWER(TRIM(name)) = LOWER({p}) OR (phone_number != '' AND phone_number = {p})",
+            (clean_name, clean_name)
+        )
+        row = cursor.fetchone()
         conn.close()
-        
-        if user:
-            return {
-                "status": "success",
-                "user": {
-                    "name": user[0],
-                    "taluk": user[1],
-                    "district": user[2],
-                    "aadhaar_number": user[3],
-                    "survey_number": user[4],
-                    "phone_number": user[5],
-                    "land_area_acres": user[6],
-                    "land_area_guntas": user[7]
-                }
-            }
-        else:
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Name or Phone Number not found in database. Please register first.")
+
+        # Verify password
+        db_pass = str(row[13] or "")
+        if db_pass != clean_pass:
             raise HTTPException(status_code=401, detail="Password incorrect")
+
+        access_token = secrets.token_urlsafe(32)
+        CROP_HISTORY_SESSIONS[access_token] = int(row[0])
+
+        return {
+            "status": "success",
+            "database": "MySQL Workbench (farmer_portal)" if db_type == "mysql" else "SQLite fallback",
+            "access_token": access_token,
+            "user": {
+                "id": f"FP-{row[0]}",
+                "name": row[1],
+                "taluk": row[2] or "Mangaluru",
+                "district": row[3] or "Dakshina Kannada",
+                "state": row[4] or "Karnataka",
+                "hobli": row[5] or "Kasaba",
+                "aadhaar_number": row[6] or "",
+                "survey_number": row[7] or "120",
+                "phone_number": row[8] or "",
+                "land_area_acres": float(row[9] or 0.0),
+                "land_area_guntas": float(row[10] or 0.0),
+                "primary_crop": row[11] or "Rice",
+                "soil_type": row[12] or "Laterite Soil"
+            }
+        }
     except HTTPException as he:
         raise he
     except Exception as e:
         print(f"Login error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during login")
 
+def _crop_history_farmer_id(authorization: Optional[str]) -> int:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Login required to access crop history")
+    farmer_id = CROP_HISTORY_SESSIONS.get(authorization[7:].strip())
+    if farmer_id is None:
+        raise HTTPException(status_code=401, detail="Crop history session is invalid or expired")
+    return farmer_id
+
+def _crop_history_record(row):
+    return {
+        "id": int(row[0]),
+        "year": int(row[1]),
+        "crop_name": row[2],
+        "season": row[3],
+        "cultivated_area_acres": float(row[4]),
+        "yield_quantity": float(row[5]),
+        "yield_unit": row[6],
+        "soil_type": row[7],
+        "soil_ph": float(row[8]),
+        "irrigation_type": row[9],
+        "profit": float(row[10]) if row[10] is not None else None,
+        "created_at": str(row[11]) if row[11] else None,
+        "updated_at": str(row[12]) if row[12] else None
+    }
+
+@app.post("/logout")
+async def logout_farmer(authorization: Optional[str] = Header(None)):
+    if authorization and authorization.startswith("Bearer "):
+        CROP_HISTORY_SESSIONS.pop(authorization[7:].strip(), None)
+    return {"status": "success"}
+
+@app.get("/farmer/crop-history")
+async def list_farmer_crop_history(authorization: Optional[str] = Header(None)):
+    farmer_id = _crop_history_farmer_id(authorization)
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(
+            f"SELECT id, year, crop_name, season, cultivated_area_acres, yield_quantity, yield_unit, soil_type, soil_ph, irrigation_type, profit, created_at, updated_at FROM farmer_crop_history WHERE farmer_id = {p} ORDER BY year DESC, id DESC",
+            (farmer_id,)
+        )
+        records = [_crop_history_record(row) for row in cursor.fetchall()]
+        conn.close()
+        return {"records": records}
+    except Exception as e:
+        if "conn" in locals():
+            conn.close()
+        print(f"Crop history lookup error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load crop history")
+
+@app.post("/farmer/crop-history")
+async def add_farmer_crop_history(
+    batch: CropHistoryBatch,
+    authorization: Optional[str] = Header(None)
+):
+    farmer_id = _crop_history_farmer_id(authorization)
+    entries = []
+    for entry in batch.records:
+        values = entry.model_dump()
+        for key in ("crop_name", "season", "soil_type", "irrigation_type", "yield_unit"):
+            values[key] = values[key].strip()
+            if not values[key]:
+                raise HTTPException(status_code=422, detail=f"{key.replace('_', ' ').capitalize()} is required")
+        entries.append(values)
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        if db_type == "mysql":
+            conn.begin()
+        records = []
+        for values in entries:
+            cursor.execute(
+                f"INSERT INTO farmer_crop_history (farmer_id, year, crop_name, season, cultivated_area_acres, yield_quantity, yield_unit, soil_type, soil_ph, irrigation_type, profit) VALUES ({', '.join([p] * 11)})",
+                (
+                    farmer_id,
+                    values["year"],
+                    values["crop_name"],
+                    values["season"],
+                    values["cultivated_area_acres"],
+                    values["yield_quantity"],
+                    values["yield_unit"],
+                    values["soil_type"],
+                    values["soil_ph"],
+                    values["irrigation_type"],
+                    values["profit"]
+                )
+            )
+            records.append({
+                "id": int(cursor.lastrowid),
+                "year": values["year"],
+                "crop_name": values["crop_name"],
+                "season": values["season"],
+                "cultivated_area_acres": values["cultivated_area_acres"],
+                "yield_quantity": values["yield_quantity"],
+                "yield_unit": values["yield_unit"],
+                "soil_type": values["soil_type"],
+                "soil_ph": values["soil_ph"],
+                "irrigation_type": values["irrigation_type"],
+                "profit": values["profit"]
+            })
+        if hasattr(conn, "commit"):
+            conn.commit()
+        conn.close()
+        return {"records": records}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "conn" in locals():
+            if hasattr(conn, "rollback"):
+                conn.rollback()
+            conn.close()
+        print(f"Crop history save error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save crop history")
+
+@app.put("/farmer/crop-history/{record_id}")
+async def update_farmer_crop_history(
+    record_id: int,
+    entry: CropHistoryEntry,
+    authorization: Optional[str] = Header(None)
+):
+    farmer_id = _crop_history_farmer_id(authorization)
+    values = entry.model_dump()
+    for key in ("crop_name", "season", "soil_type", "irrigation_type", "yield_unit"):
+        values[key] = values[key].strip()
+        if not values[key]:
+            raise HTTPException(status_code=422, detail=f"{key.replace('_', ' ').capitalize()} is required")
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(
+            f"UPDATE farmer_crop_history SET year={p}, crop_name={p}, season={p}, cultivated_area_acres={p}, yield_quantity={p}, yield_unit={p}, soil_type={p}, soil_ph={p}, irrigation_type={p}, profit={p}, updated_at=CURRENT_TIMESTAMP WHERE id={p} AND farmer_id={p}",
+            (
+                values["year"], values["crop_name"], values["season"],
+                values["cultivated_area_acres"], values["yield_quantity"], values["yield_unit"],
+                values["soil_type"], values["soil_ph"], values["irrigation_type"], values["profit"],
+                record_id, farmer_id
+            )
+        )
+        if cursor.rowcount == 0:
+            cursor.execute(
+                f"SELECT id FROM farmer_crop_history WHERE id={p} AND farmer_id={p}",
+                (record_id, farmer_id)
+            )
+            if not cursor.fetchone():
+                conn.close()
+                raise HTTPException(status_code=404, detail="Crop history record not found")
+        if hasattr(conn, "commit"):
+            conn.commit()
+        cursor.execute(
+            f"SELECT id, year, crop_name, season, cultivated_area_acres, yield_quantity, yield_unit, soil_type, soil_ph, irrigation_type, profit, created_at, updated_at FROM farmer_crop_history WHERE id={p} AND farmer_id={p}",
+            (record_id, farmer_id)
+        )
+        record = _crop_history_record(cursor.fetchone())
+        conn.close()
+        return {"record": record}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "conn" in locals():
+            conn.close()
+        print(f"Crop history update error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update crop history")
+
+@app.delete("/farmer/crop-history/{record_id}")
+async def delete_farmer_crop_history(
+    record_id: int,
+    authorization: Optional[str] = Header(None)
+):
+    farmer_id = _crop_history_farmer_id(authorization)
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(
+            f"DELETE FROM farmer_crop_history WHERE id={p} AND farmer_id={p}",
+            (record_id, farmer_id)
+        )
+        if cursor.rowcount == 0:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Crop history record not found")
+        if hasattr(conn, "commit"):
+            conn.commit()
+        conn.close()
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if "conn" in locals():
+            conn.close()
+        print(f"Crop history delete error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete crop history")
+
+@app.post("/farmer/update")
+async def update_farmer_profile(upd: UpdateFarmerRequest):
+    clean_curr = (upd.current_name or upd.name or "").strip()
+    if not clean_curr:
+        raise HTTPException(status_code=400, detail="Farmer name is required to update profile")
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+
+        cursor.execute(f"SELECT id FROM farmers WHERE LOWER(TRIM(name)) = LOWER({p})", (clean_curr,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Farmer not found in MySQL Workbench database")
+
+        fid = row[0]
+        updates = []
+        vals = []
+        if upd.name:
+            updates.append(f"name = {p}")
+            vals.append(upd.name.strip())
+        if upd.phone_number is not None:
+            updates.append(f"phone_number = {p}")
+            vals.append(upd.phone_number.strip())
+        if upd.survey_number is not None:
+            updates.append(f"survey_number = {p}")
+            vals.append(upd.survey_number.strip())
+        if upd.state is not None:
+            updates.append(f"state = {p}")
+            vals.append(upd.state.strip())
+        if upd.district is not None:
+            updates.append(f"district = {p}")
+            vals.append(upd.district.strip())
+        if upd.taluk is not None:
+            updates.append(f"taluk = {p}")
+            vals.append(upd.taluk.strip())
+        if upd.hobli is not None:
+            updates.append(f"hobli = {p}")
+            vals.append(upd.hobli.strip())
+        if upd.land_area_acres is not None:
+            updates.append(f"land_area_acres = {p}")
+            vals.append(float(upd.land_area_acres))
+        if upd.land_area_guntas is not None:
+            updates.append(f"land_area_guntas = {p}")
+            vals.append(float(upd.land_area_guntas))
+        if upd.primary_crop is not None:
+            updates.append(f"primary_crop = {p}")
+            vals.append(upd.primary_crop.strip())
+        if upd.soil_type is not None:
+            updates.append(f"soil_type = {p}")
+            vals.append(upd.soil_type.strip())
+
+        if updates:
+            vals.append(fid)
+            cursor.execute(f"UPDATE farmers SET {', '.join(updates)} WHERE id = {p}", tuple(vals))
+            if hasattr(conn, "commit"):
+                conn.commit()
+
+        # Re-fetch updated record
+        cursor.execute(f"SELECT id, name, taluk, district, state, hobli, aadhaar_number, survey_number, phone_number, land_area_acres, land_area_guntas, primary_crop, soil_type FROM farmers WHERE id = {p}", (fid,))
+        updated_row = cursor.fetchone()
+        conn.close()
+
+        # Shadow sync to SQLite if exists
+        if db_type == "mysql" and os.path.exists("farmer_portal.db"):
+            try:
+                s_conn = sqlite3.connect("farmer_portal.db")
+                s_cur = s_conn.cursor()
+                s_updates = [u.replace("%s", "?") for u in updates]
+                if s_updates:
+                    s_cur.execute(f"UPDATE farmers SET {', '.join(s_updates)} WHERE LOWER(TRIM(name)) = LOWER(?)", tuple([v for v in vals[:-1]] + [clean_curr]))
+                    s_conn.commit()
+                s_conn.close()
+            except Exception as se:
+                print(f"SQLite update shadow sync notice: {se}")
+
+        return {
+            "status": "success",
+            "message": "Farmer profile updated successfully in MySQL Workbench",
+            "database": "MySQL Workbench (farmer_portal)",
+            "user": {
+                "id": f"FP-{updated_row[0]}",
+                "name": updated_row[1],
+                "taluk": updated_row[2] or "Mangaluru",
+                "district": updated_row[3] or "Dakshina Kannada",
+                "state": updated_row[4] or "Karnataka",
+                "hobli": updated_row[5] or "Kasaba",
+                "aadhaar_number": updated_row[6] or "",
+                "survey_number": updated_row[7] or "120",
+                "phone_number": updated_row[8] or "",
+                "land_area_acres": float(updated_row[9] or 0.0),
+                "land_area_guntas": float(updated_row[10] or 0.0),
+                "primary_crop": updated_row[11] or "Rice",
+                "soil_type": updated_row[12] or "Laterite Soil"
+            }
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Profile update error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/farmers")
+async def list_registered_farmers():
+    """List all registered farmers saved in MySQL Workbench."""
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, phone_number, survey_number, state, district, taluk, hobli, land_area_acres, land_area_guntas, primary_crop, soil_type, created_at FROM farmers ORDER BY id DESC")
+        rows = cursor.fetchall()
+        conn.close()
+
+        farmers_list = []
+        for r in rows:
+            farmers_list.append({
+                "id": f"FP-{r[0]}",
+                "name": r[1],
+                "phone_number": r[2] or "",
+                "survey_number": r[3] or "",
+                "state": r[4] or "Karnataka",
+                "district": r[5] or "",
+                "taluk": r[6] or "",
+                "hobli": r[7] or "",
+                "land_area_acres": float(r[8] or 0.0),
+                "land_area_guntas": float(r[9] or 0.0),
+                "primary_crop": r[10] or "Rice",
+                "soil_type": r[11] or "Laterite Soil",
+                "created_at": str(r[12]) if len(r) > 12 and r[12] else None
+            })
+
+        return {
+            "status": "success",
+            "database": "MySQL Workbench (farmer_portal)" if db_type == "mysql" else "SQLite fallback",
+            "total_registered_farmers": len(farmers_list),
+            "farmers": farmers_list
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/farmer-info/{name}")
 async def get_farmer_info(name: str):
     try:
-        conn = sqlite3.connect("farmer_portal.db")
+        conn, db_type = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT name, taluk, district, aadhaar_number, survey_number FROM farmers WHERE name = ?", (name,))
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(f"SELECT id, name, taluk, district, state, hobli, aadhaar_number, survey_number, phone_number, land_area_acres, land_area_guntas, primary_crop, soil_type FROM farmers WHERE LOWER(TRIM(name)) = LOWER({p})", (name.strip(),))
         user = cursor.fetchone()
         conn.close()
         
         if user:
             return {
-                "name": user[0],
-                "taluk": user[1],
-                "district": user[2],
-                "aadhaar_number": user[3],
-                "survey_number": user[4]
+                "id": f"FP-{user[0]}",
+                "name": user[1],
+                "taluk": user[2] or "Mangaluru",
+                "district": user[3] or "Dakshina Kannada",
+                "state": user[4] or "Karnataka",
+                "hobli": user[5] or "Kasaba",
+                "aadhaar_number": user[6] or "",
+                "survey_number": user[7] or "120",
+                "phone_number": user[8] or "",
+                "land_area_acres": float(user[9] or 0.0),
+                "land_area_guntas": float(user[10] or 0.0),
+                "primary_crop": user[11] or "Rice",
+                "soil_type": user[12] or "Laterite Soil",
+                "database": "MySQL Workbench (farmer_portal)" if db_type == "mysql" else "SQLite fallback"
             }
-        raise HTTPException(status_code=404, detail="Farmer not found")
+        raise HTTPException(status_code=404, detail="Farmer not found in database")
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -2788,8 +3548,209 @@ async def get_bhoomi_land_map(
     width = 0.0010
     
     parcels = []
-    first_names = ["Ramesh", "Suresh", "Manjunath", "Ganesh", "Shekhar", "Kempe", "Ananda", "Basavaraj", "Nagaraj", "Sharanappa", "Venkatesh", "Kumar"]
-    last_names = ["Gowda", "Patil", "Bhat", "Hegde", "Naik", "Nayak", "Pujari", "Reddy", "Shetty", "Kulkarni"]
+    first_names = [
+        "Ramesh", "Suresh", "Manjunath", "Ganesh", "Shekhar", "Kempe", "Ananda", "Basavaraj", 
+        "Nagaraj", "Sharanappa", "Venkatesh", "Kumar", "Rahul", "Sathish", "Padma", "Parvathi", 
+        "Gopal", "Ashok", "Kavitha", "Keshav", "Anil", "Praveen", "Pradeep", "Mahesh", 
+        "Santosh", "Sunil", "Shiva", "Vijay", "Ajay", "Ravi", "Ravindra", "Chandrashekhar", 
+        "Mahadev", "Sidda", "Siddaraju", "Raju", "Somanna", "Ningappa", "Mallappa", "Hanumanth", 
+        "Lakshman", "Ram", "Krishna", "Somesh", "Harish", "Devendra", "Kiran", "Rohit", 
+        "Sachin", "Deepak", "Naveen", "Lokesh", "Prashanth", "Pooja", "Radha", "Suma", "Lakshmi",
+        "Jayaram", "Narayana", "Manoj", "Sharada", "Pushpa", "Usha", "Geetha", "Renuka",
+        "Anitha", "Kamala", "Bhoomi", "Roopa", "Shwetha", "Divya", "Sangeetha", "Prema",
+        "Basappa", "Eshwar", "Yogesh", "Vasant", "Govinda", "Dhananjaya", "Raghavendra", "Sudhir",
+        "Giridhara", "Balaram", "Muniyappa", "Shankar", "Shivananda", "Gururaj", "Chidanand", "Vittal",
+        "Jagadish", "Vidyadhar", "Panduranga", "Madhav", "Mukund", "Dayanand", "Srikant", "Babu",
+        "Subhash", "Thippeswamy", "Chennappa", "Bhyrappa", "Doddanagouda", "Girish", "Bheema", "Yallappa"
+    ]
+    last_names = [
+        "Gowda", "Patil", "Bhat", "Hegde", "Naik", "Nayak", "Pujari", "Poojary", "Reddy", 
+        "Shetty", "Kulkarni", "Pinto", "Kotian", "Kamath", "Acharya", "Salian", "Castelino", 
+        "Moras", "Rao", "Devadiga", "Mendonca", "Alva", "Bhandary", "Suvarna", "Barke", 
+        "Kunder", "Amin", "Banga", "Karkera", "Shinde", "Deshmukh", "Joshi", "Prabhu",
+        "Shenoy", "Bairy", "Bangera", "Sequeira", "Fernandes", "Marla", "Ballal",
+        "Mani", "Somayaji", "Adiga", "Hebbar", "Holla", "Udupa", "Karanth", "Kavoor",
+        "Gatti", "Madivala", "Kulal", "Billava", "Kharvi", "Moger", "Bunt", "Maratha",
+        "Chavan", "Jadhav", "More", "Ghatage", "Biradar", "Inamdar", "Nadiger", "Angadi",
+        "Hiremath", "Pattar", "Badiger", "Kambar", "Sunagar", "Metri", "Tahasildar"
+    ]
+
+    kannada_first = {
+        "Ramesh": "ರಮೇಶ್", "Suresh": "ಸುರೇಶ್", "Manjunath": "ಮಂಜುನಾಥ್", "Ganesh": "ಗಣೇಶ್", 
+        "Shekhar": "ಶೇಖರ್", "Kempe": "ಕೆಂಪೇ", "Ananda": "ಆನಂದ್", "Basavaraj": "ಬಸವರಾಜ್", 
+        "Nagaraj": "ನಾಗರಾಜ್", "Sharanappa": "ಶರಣಪ್ಪ", "Venkatesh": "ವೆಂಕಟೇಶ್", "Kumar": "ಕುಮಾರ್",
+        "Rahul": "ರಾಹುಲ್", "Sathish": "ಸತೀಶ್", "Padma": "ಪದ್ಮಾ", "Parvathi": "ಪಾರ್ವತಿ", 
+        "Gopal": "ಗೋಪಾಲ್", "Ashok": "ಅಶೋಕ್", "Kavitha": "ಕವಿತಾ", "Keshav": "ಕೇಶವ್", "Anil": "ಅನಿಲ್",
+        "Praveen": "ಪ್ರವೀಣ್", "Pradeep": "ಪ್ರದೀಪ್", "Mahesh": "ಮಹೇಶ್", "Santosh": "ಸಂತೋಷ್",
+        "Sunil": "ಸುನಿಲ್", "Shiva": "ಶಿವ", "Vijay": "ವಿಜಯ್", "Ajay": "ಅಜಯ್", "Ravi": "ರವಿ",
+        "Ravindra": "ರವೀಂದ್ರ", "Chandrashekhar": "ಚಂದ್ರಶೇಖರ್", "Mahadev": "ಮಹಾದೇವ", "Sidda": "ಸಿದ್ದ",
+        "Siddaraju": "ಸಿದ್ದರಾಜು", "Raju": "ರಾಜು", "Somanna": "ಸೋಮಣ್ಣ", "Ningappa": "ನಿಂಗಪ್ಪ",
+        "Mallappa": "ಮಲ್ಲಪ್ಪ", "Hanumanth": "ಹನುಮಂತ", "Lakshman": "ಲಕ್ಷ್ಮಣ", "Ram": "ರಾಮ್",
+        "Krishna": "ಕೃಷ್ಣ", "Somesh": "ಸೋಮೇಶ್", "Harish": "ಹರೀಶ್", "Devendra": "ದೇವೇಂದ್ರ",
+        "Kiran": "ಕಿರಣ್", "Rohit": "ರೋಹಿತ್", "Sachin": "ಸಚಿನ್", "Deepak": "ದೀಪಕ್",
+        "Naveen": "ನವೀನ್", "Lokesh": "ಲೋಕೇಶ್", "Prashanth": "ಪ್ರಶಾಂತ್", "Pooja": "ಪೂಜಾ",
+        "Radha": "ರಾಧಾ", "Suma": "ಸುಮಾ", "Lakshmi": "ಲಕ್ಷ್ಮಿ",
+        "Jayaram": "ಜಯರಾಮ್", "Narayana": "ನಾರಾಯಣ", "Manoj": "ಮನೋಜ್", "Sharada": "ಶಾರದಾ", 
+        "Pushpa": "ಪುಷ್ಪ", "Usha": "ಉಷಾ", "Geetha": "ಗೀತಾ", "Renuka": "ರೇಣುಕಾ",
+        "Anitha": "ಅನಿತಾ", "Kamala": "ಕಮಲಾ", "Bhoomi": "ಭೂಮಿ", "Roopa": "ರೂಪಾ", 
+        "Shwetha": "ಶ್ವೇತಾ", "Divya": "ದಿವ್ಯಾ", "Sangeetha": "ಸಂಗೀತಾ", "Prema": "ಪ್ರೇಮಾ",
+        "Basappa": "ಬಸಪ್ಪ", "Eshwar": "ಈಶ್ವರ್", "Yogesh": "ಯೋಗೇಶ್", "Vasant": "ವಸಂತ್", 
+        "Govinda": "ಗೋವಿಂದ", "Dhananjaya": "ಧನಂಜಯ", "Raghavendra": "ರಾಘವೇಂದ್ರ", "Sudhir": "ಸುಧೀರ್",
+        "Giridhara": "ಗಿರಿಧರ", "Balaram": "ಬಲರಾಮ್", "Muniyappa": "ಮುನಿಯಪ್ಪ", "Shankar": "ಶಂಕರ್", 
+        "Shivananda": "ಶಿವಾನಂದ", "Gururaj": "ಗುರುರಾಜ್", "Chidanand": "ಚಿದಾನಂದ", "Vittal": "ವಿಠ್ಠಲ್",
+        "Jagadish": "ಜಗದೀಶ್", "Vidyadhar": "ವಿದ್ಯಾಧರ್", "Panduranga": "ಪಾಂಡುರಂಗ", "Madhav": "ಮಾಧವ್", 
+        "Mukund": "ಮುಕುಂದ್", "Dayanand": "ದಯಾನಂದ", "Srikant": "ಶ್ರೀಕಾಂತ್", "Babu": "ಬಾಬು",
+        "Subhash": "ಸುಭಾಷ್", "Thippeswamy": "ತಿಪ್ಪೇಸ್ವಾಮಿ", "Chennappa": "ಚೆನ್ನಪ್ಪ", "Bhyrappa": "ಭೈರಪ್ಪ", 
+        "Doddanagouda": "ದೊಡ್ಡನಗೌಡ", "Girish": "ಗಿರೀಶ್", "Bheema": "ಭೀಮ", "Yallappa": "ಯಲ್ಲಪ್ಪ"
+    }
+    kannada_last = {
+        "Gowda": "ಗೌಡ", "Patil": "ಪಾಟೀಲ್", "Bhat": "ಭಟ್", "Hegde": "ಹೆಗಡೆ", "Naik": "ನಾಯ್ಕ್", 
+        "Nayak": "ನಾಯಕ್", "Pujari": "ಪೂಜಾರಿ", "Poojary": "ಪೂಜಾರಿ", "Reddy": "ರೆಡ್ಡಿ", 
+        "Shetty": "ಶೆಟ್ಟಿ", "Kulkarni": "ಕುಲಕರ್ಣಿ", "Pinto": "ಪಿಂಟೋ", "Kotian": "ಕೋಟ್ಯಾನ್",
+        "Kamath": "ಕಾಮತ್", "Acharya": "ಆಚಾರ್ಯ", "Salian": "ಸಾಲ್ಯಾನ್", "Castelino": "ಕ್ಯಾಸ್ಟೆಲಿನೊ",
+        "Moras": "ಮೊರಾಸ್", "Rao": "ರಾವ್", "Devadiga": "ದೇವಾಡಿಗ", "Mendonca": "ಮೆಂಡೋನ್ಸಾ",
+        "Alva": "ಆಳ್ವ", "Bhandary": "ಭಂಡಾರಿ", "Suvarna": "ಸುವರ್ಣ", "Barke": "ಬಾರ್ಕೆ",
+        "Kunder": "ಕುಂದರ್", "Amin": "ಅಮೀನ್", "Banga": "ಬಂಗಾ", "Karkera": "ಕರ್ಕೇರ",
+        "Shinde": "ಶಿಂಧೆ", "Deshmukh": "ದೇಶ್ಮುಖ್", "Joshi": "ಜೋಷಿ", "Prabhu": "ಪ್ರಭು",
+        "Shenoy": "ಶೆಣೈ", "Bairy": "ಬೈರಿ", "Bangera": "ಬಂಗೇರ", "Sequeira": "ಸಿಕ್ವೇರಾ",
+        "Fernandes": "ಫರ್ನಾಂಡಿಸ್", "Marla": "ಮಾರ್ಲ", "Ballal": "ಬಲ್ಲಾಳ್",
+        "Mani": "ಮಣಿ", "Somayaji": "ಸೋಮಯಾಜಿ", "Adiga": "ಅಡಿಗ", "Hebbar": "ಹೆಬ್ಬಾರ್",
+        "Holla": "ಹೊಳ್ಳ", "Udupa": "ಉಡುಪ", "Karanth": "ಕಾರಂತ್", "Kavoor": "ಕಾವೂರು",
+        "Gatti": "ಗಟ್ಟಿ", "Madivala": "ಮಡಿವಾಳ", "Kulal": "ಕುಲಾಲ್", "Billava": "ಬಿಲ್ಲವ",
+        "Kharvi": "ಖಾರ್ವಿ", "Moger": "ಮೊಗೇರ", "Bunt": "ಬಂಟ್", "Maratha": "ಮರಾಠಾ",
+        "Chavan": "ಚವಾಣ್", "Jadhav": "ಜಾಧವ್", "More": "ಮೋರೆ", "Ghatage": "ಘಾಟ್ಗೆ",
+        "Biradar": "ಬಿರಾದಾರ್", "Inamdar": "ಇನಾಮ್ದಾರ್", "Nadiger": "ನಾಡೀಗೇರ್", "Angadi": "ಅಂಗಡಿ",
+        "Hiremath": "ಹಿರೇಮಠ್", "Pattar": "ಪಟ್ಟಾರ್", "Badiger": "ಬಡಿಗೇರ್", "Kambar": "ಕಂಬಾರ್",
+        "Sunagar": "ಸುಣಗಾರ್", "Metri": "ಮೇತ್ರಿ", "Tahasildar": "ತಹಶೀಲ್ದಾರ್"
+    }
+
+    import re
+    import hashlib
+
+    m_survey = re.search(r'\d+', user_survey_clean)
+    survey_base = int(m_survey.group()) if m_survey else (abs(int(hashlib.md5(user_survey_clean.encode()).hexdigest(), 16)) % 800 + 50)
+
+    # Adjoining RTC plot base offsets for the 8 adjacent directions
+    adjacent_offsets = {
+        (-1, -1): (survey_base - 1, 1),
+        (-1,  0): (survey_base - 1, 2),
+        (-1,  1): (survey_base, 1),
+        ( 0, -1): (survey_base, 2),
+        ( 0,  1): (survey_base, 3),
+        ( 1, -1): (survey_base + 1, 1),
+        ( 1,  0): (survey_base + 1, 2),
+        ( 1,  1): (survey_base + 2, 1),
+    }
+
+    used_survey_numbers = {user_survey_clean}
+    used_farmer_names = set()
+    used_first_names = set()
+    used_last_names = set()
+
+    # Check if the user survey or name matches a registered record in MySQL Workbench
+    db_matched_farmer = None
+    try:
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(
+            f"SELECT id, name, survey_number, phone_number, state, district, taluk, hobli, land_area_acres, land_area_guntas, primary_crop, soil_type FROM farmers WHERE UPPER(TRIM(survey_number)) = {p} OR (name != '' AND LOWER(TRIM(name)) = {p})",
+            (user_survey_clean, (user_name or "").strip().lower())
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            db_matched_farmer = {
+                "id": row[0], "name": row[1], "survey_number": row[2], "phone": row[3],
+                "state": row[4], "district": row[5], "taluk": row[6], "hobli": row[7],
+                "acres": float(row[8] or 0.0), "guntas": float(row[9] or 0.0),
+                "primary_crop": row[10] or user_crop or "Rice",
+                "soil_type": row[11] or DISTRICT_BASELINES.get(district, {}).get("soil_type", "Laterite Soil")
+            }
+    except Exception as dbe:
+        print(f"Bhoomi map DB lookup notice: {dbe}")
+
+    # Check if the user survey matches an authentic record in mangaluru_farmer_details.csv
+    csv_matched_user = None
+    if not db_matched_farmer and os.path.exists(FARMER_DETAILS_FILE):
+        try:
+            with open(FARMER_DETAILS_FILE, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get('Survey_Number', '').strip().upper() == user_survey_clean:
+                        csv_matched_user = row
+                        break
+        except Exception:
+            pass
+
+    resolved_user_name = (db_matched_farmer.get("name") if db_matched_farmer else None) or (csv_matched_user.get("Farmer_Name") if csv_matched_user else None) or user_name or "You"
+
+    if resolved_user_name and resolved_user_name.strip().lower() != "you":
+        u_clean = resolved_user_name.strip().lower()
+        used_farmer_names.add(u_clean)
+        u_parts = u_clean.split()
+        if u_parts:
+            used_first_names.add(u_parts[0])
+            if len(u_parts) > 1:
+                used_last_names.add(u_parts[-1])
+
+    # Distinct random seed specific to this taluk, hobli, and user plot/survey number
+    survey_seed = int(hashlib.sha256(f"{taluk}_{hobli or ''}_{user_survey_clean}".encode()).hexdigest(), 16)
+    rng = random.Random(survey_seed)
+
+    # Shuffle candidates deterministically based on the given plot/survey number
+    cand_firsts = [f for f in first_names if f.lower() not in used_first_names]
+    cand_lasts = [l for l in last_names if l.lower() not in used_last_names]
+    rng.shuffle(cand_firsts)
+    rng.shuffle(cand_lasts)
+
+    # Deprioritize recently used farmers across previous searches so changing plot/survey gives completely new farmers
+    recent_set = set(RECENT_SURVEY_FARMERS)
+    cand_firsts.sort(key=lambda x: x.lower() in recent_set)
+    cand_lasts.sort(key=lambda x: x.lower() in recent_set)
+
+    # Pre-select 8 completely unique neighbours (no repeating first names, no repeating last names, no repeating full names)
+    pre_assigned_neighbours = []
+    f_ptr = 0
+    l_ptr = 0
+    while len(pre_assigned_neighbours) < 8 and f_ptr < len(cand_firsts) and l_ptr < len(cand_lasts):
+        fn = cand_firsts[f_ptr]
+        ln = cand_lasts[l_ptr]
+        full_n = f"{fn} {ln}"
+        f_ptr += 1
+        l_ptr += 1
+        if full_n.lower() not in used_farmer_names and fn.lower() not in used_first_names and ln.lower() not in used_last_names:
+            used_farmer_names.add(full_n.lower())
+            used_first_names.add(fn.lower())
+            used_last_names.add(ln.lower())
+            pre_assigned_neighbours.append({
+                "fname": fn,
+                "lname": ln,
+                "full": full_n,
+                "full_kn": f"{kannada_first.get(fn, fn)} {kannada_last.get(ln, ln)}"
+            })
+
+    # Fallback to satisfy 8 neighbours if needed
+    attempt_fill = 0
+    while len(pre_assigned_neighbours) < 8 and attempt_fill < len(first_names):
+        fn = first_names[(survey_seed + attempt_fill * 13) % len(first_names)]
+        ln = last_names[(survey_seed + attempt_fill * 17) % len(last_names)]
+        full_n = f"{fn} {ln}"
+        attempt_fill += 1
+        if full_n.lower() not in used_farmer_names and fn.lower() not in used_first_names:
+            used_farmer_names.add(full_n.lower())
+            used_first_names.add(fn.lower())
+            pre_assigned_neighbours.append({
+                "fname": fn,
+                "lname": ln,
+                "full": full_n,
+                "full_kn": f"{kannada_first.get(fn, fn)} {kannada_last.get(ln, ln)}"
+            })
+
+    # Cache assigned names in history to ensure the next new plot/survey query receives fresh farmers
+    for nb in pre_assigned_neighbours:
+        RECENT_SURVEY_FARMERS.append(nb["full"].lower())
+        RECENT_SURVEY_FARMERS.append(nb["fname"].lower())
     
     district = get_district_for_taluk(taluk) or "Dakshina Kannada"
     coastal_districts = ["Dakshina Kannada", "Udupi", "Uttara Kannada"]
@@ -2804,8 +3765,8 @@ async def get_bhoomi_land_map(
         crops = ["Jowar", "Cotton", "Maize", "Bengal Gram", "Red Gram", "Wheat"]
     else:
         crops = ["Ragi", "Maize", "Groundnut", "Sugarcane", "Tomato", "Mango"]
-        
-    import hashlib
+
+    nb_index = 0
     
     for r in [-1, 0, 1]:
         for c in [-1, 0, 1]:
@@ -2822,7 +3783,6 @@ async def get_bhoomi_land_map(
             lon_max = lon_c + width / 2.0
             
             # Deterministically perturb the corners of the polygon based on h_val
-            # to make it look like a realistic cadastral boundary map instead of a strict grid.
             p_scale = 0.00012
             p_lat_min = lat_min + (((h_val & 0xFF) % 7) - 3) * (p_scale / 6.0)
             p_lat_max = lat_max + ((((h_val >> 8) & 0xFF) % 7) - 3) * (p_scale / 6.0)
@@ -2840,62 +3800,60 @@ async def get_bhoomi_land_map(
             suggested_work = ""
             suggested_work_kn = ""
             is_empty = False
-            
+
             if is_user:
                 s_num = user_survey_clean
-                owner = user_name or "You"
-                owner_kn = "ನೀವು"
-                acres = user_acres or 2.0
-                guntas = user_guntas or 0.0
-                crop = user_crop or "Rice"
+                owner = resolved_user_name
+                if owner and owner.strip().lower() == "rahul":
+                    owner_kn = "ರಾಹುಲ್"
+                elif owner and owner.strip() in kannada_first:
+                    owner_kn = kannada_first[owner.strip()]
+                elif owner and " " in owner.strip():
+                    parts = owner.strip().split()
+                    owner_kn = f"{kannada_first.get(parts[0], parts[0])} {kannada_last.get(parts[-1], parts[-1])}"
+                else:
+                    owner_kn = "ನೀವು"
+
+                if db_matched_farmer:
+                    acres = float(db_matched_farmer["acres"] or user_acres or 2.0)
+                    guntas = float(db_matched_farmer["guntas"] or user_guntas or 0.0)
+                    crop = db_matched_farmer["primary_crop"] or user_crop or "Rice"
+                    soil = db_matched_farmer["soil_type"] or DISTRICT_BASELINES.get(district, {}).get("soil_type", "Red Sandy")
+                elif csv_matched_user:
+                    acres = float(csv_matched_user.get("Total_Land_Acres", user_acres or 2.0))
+                    guntas = float(csv_matched_user.get("Total_Land_Guntas", user_guntas or 0.0))
+                    crop = csv_matched_user.get("Primary_Crop", user_crop or "Rice")
+                    soil = csv_matched_user.get("Soil_Type", DISTRICT_BASELINES.get(district, {}).get("soil_type", "Red Sandy"))
+                else:
+                    acres = user_acres or 2.0
+                    guntas = user_guntas or 0.0
+                    crop = user_crop or "Rice"
+                    soil = DISTRICT_BASELINES.get(district, {}).get("soil_type", "Red Sandy")
+
                 l_type = "Wet" if crop in ["Rice", "Sugarcane"] else "Garden" if crop in ["Arecanut", "Coconut", "Coffee"] else "Dry"
                 l_type_kn = "ತರಿ (Wet)" if l_type == "Wet" else "ಬಾಗಾಯ್ತು (Garden)" if l_type == "Garden" else "ಖುಷ್ಕಿ (Dry)"
-                soil = DISTRICT_BASELINES.get(district, {}).get("soil_type", "Red Sandy")
             else:
-                survey_base = 100
-                try:
-                    import re
-                    m = re.match(r'\d+', user_survey_clean)
-                    if m:
-                        survey_base = int(m.group())
-                except Exception:
-                    pass
-                    
-                if r == 0:
-                    s_num = f"{survey_base}/{abs(c) + 1}"
-                elif c == 0:
-                    s_num = f"{survey_base + r}"
-                else:
-                    s_num = f"{survey_base + r}/{abs(c) + 1}"
-                    
+                base_cand, sub_cand = adjacent_offsets.get((r, c), (survey_base + r * 2 + c, 1))
+                s_num = f"{base_cand}/{sub_cand}"
+                while s_num in used_survey_numbers:
+                    sub_cand += 1
+                    s_num = f"{base_cand}/{sub_cand}"
+                used_survey_numbers.add(s_num)
+
+                # Assign pre-selected completely unique non-repeated farmer
+                assigned_nb = pre_assigned_neighbours[nb_index % len(pre_assigned_neighbours)]
+                nb_index += 1
+                owner = assigned_nb["full"]
+                owner_kn = assigned_nb["full_kn"]
+
                 is_empty = (h_val % 4 == 0)
                 
                 if is_empty:
-                    owner = "Government Land (Fallow)"
-                    owner_kn = "ಸರ್ಕಾರಿ ಬಂಜರು ಜಮೀನು"
-                    crop = "Fallow"
+                    crop = "Empty Land (Fallow)"
                     l_type = "Dry"
                     l_type_kn = "ಖುಷ್ಕಿ (Dry)"
                     soil = DISTRICT_BASELINES.get(district, {}).get("soil_type", "Laterite")
-                    
-                    # Fetch soil type for empty land
-                    soil = DISTRICT_BASELINES.get(district, {}).get("soil_type", "Laterite")
                 else:
-                    fname = first_names[h_val % len(first_names)]
-                    lname = last_names[(h_val >> 2) % len(last_names)]
-                    owner = f"{fname} {lname}"
-                    
-                    kannada_first = {
-                        "Ramesh": "ರಮೇಶ್", "Suresh": "ಸುರೇಶ್", "Manjunath": "ಮಂಜುನಾಥ್", "Ganesh": "ಗಣೇಶ್", 
-                        "Shekhar": "ಶೇಖರ್", "Kempe": "ಕೆಂಪೇ", "Ananda": "ಆನಂದ್", "Basavaraj": "ಬಸವರಾಜ್", 
-                        "Nagaraj": "ನಾಗರಾಜ್", "Sharanappa": "ಶರಣಪ್ಪ", "Venkatesh": "ವೆಂಕಟೇಶ್", "Kumar": "ಕುಮಾರ್"
-                    }
-                    kannada_last = {
-                        "Gowda": "ಗೌಡ", "Patil": "ಪಾಟೀಲ್", "Bhat": "ಭಟ್", "Hegde": "ಹೆಗಡೆ", "Naik": "ನಾಯ್ಕ್", 
-                        "Nayak": "ನಾಯಕ್", "Pujari": "ಪೂಜಾರಿ", "Reddy": "ರೆಡ್ಡಿ", "Shetty": "ಶೆಟ್ಟಿ", "Kulkarni": "ಕುಲಕರ್ಣಿ"
-                    }
-                    owner_kn = f"{kannada_first.get(fname, fname)} {kannada_last.get(lname, lname)}"
-                    
                     crop = crops[h_val % len(crops)]
                     l_type = "Wet" if crop in ["Rice", "Sugarcane"] else "Garden" if crop in ["Arecanut", "Coconut", "Coffee"] else "Dry"
                     l_type_kn = "ತರಿ (Wet)" if l_type == "Wet" else "ಬಾಗಾಯ್ತು (Garden)" if l_type == "Garden" else "ಖುಷ್ಕಿ (Dry)"
@@ -2906,7 +3864,7 @@ async def get_bhoomi_land_map(
 
             # Calculate recommendations & suggested work for all parcels (user, empty, or neighbour)
             baseline = DISTRICT_BASELINES.get(district, {"soil_type": "Laterite", "ph": 6.2, "avg_temp": 28.0, "avg_humidity": 85, "avg_rainfall": 3500})
-            rec_list = get_recommendations_from_csv(baseline["ph"], baseline["avg_temp"], baseline["avg_rainfall"], baseline["avg_humidity"])
+            rec_list = get_recommendations_from_csv(baseline["ph"], baseline["avg_temp"], baseline["avg_rainfall"], baseline["avg_humidity"], district=district, soil_type=soil)
             recommended_crops = rec_list[:3]  # Top 3 suggestions
             
             # Add detailed agricultural development work suggestions based on soil type
@@ -3004,8 +3962,8 @@ async def get_recommendations(
     final_humidity = humidity if humidity is not None else baseline["avg_humidity"]
     soil_type = baseline["soil_type"]
     
-    # Find matching crops
-    crop_names = get_recommendations_from_csv(final_ph, final_temp, final_rainfall, humidity=final_humidity)
+    # Find matching crops strictly suited to this region and parameters
+    crop_names = get_recommendations_from_csv(final_ph, final_temp, final_rainfall, humidity=final_humidity, district=district, taluk=taluk, soil_type=soil_type)
     
     enriched_recommendations = []
     for crop in crop_names:
@@ -4106,43 +5064,242 @@ async def reverse_geocode(lat: float, lon: float):
 
 
 @app.get("/farmer-lookup")
-async def farmer_lookup(name: str, phone: str):
-    """Check if a farmer exists in our master dataset and return their history."""
+async def farmer_lookup(name: str, phone: str = ""):
+    """Check if a farmer exists in MySQL Workbench (or master dataset) and return their complete profile and history."""
     history = []
     farmer_info = {}
+
+    def get_previous_crops(records, current_crops):
+        if not records:
+            return []
+
+        latest_year = max(int(row["Year"]) for row in records)
+        current_crop_names = {crop.strip().casefold() for crop in current_crops if crop}
+        seen_crops = set()
+        previous_crops = []
+        for row in records:
+            if int(row["Year"]) >= latest_year:
+                continue
+            for field in ("Primary_Crop", "Secondary_Crop"):
+                crop = (row.get(field) or "").strip()
+                crop_key = crop.casefold()
+                if crop and crop_key not in current_crop_names and crop_key not in seen_crops:
+                    previous_crops.append(crop)
+                    seen_crops.add(crop_key)
+        return previous_crops
     
-    if not os.path.exists(FARMER_DETAILS_FILE):
-        return {"found": False}
-        
+    clean_name = (name or "").strip().lower()
+    clean_phone = (phone or "").strip()
+
+    # 1. Primary Check: MySQL Workbench database
     try:
-        with open(FARMER_DETAILS_FILE, mode='r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                # Case-insensitive name match and exact phone match
-                if row['Farmer_Name'].lower() == name.lower() and row['Phone'] == phone:
-                    if not farmer_info:
-                        farmer_info = {
-                            "id": row['Farmer_ID'],
-                            "name": row['Farmer_Name'],
-                            "acres": row['Total_Land_Acres'],
-                            "guntas": row['Total_Land_Guntas'],
-                            "primary_crop": row['Primary_Crop'],
-                            "secondary_crop": row['Secondary_Crop'],
-                            "soil_type": row['Soil_Type'],
-                            "ph": row['pH'],
-                            "survey_number": row['Survey_Number']
-                        }
-                    
+        conn, db_type = get_db_connection()
+        cursor = conn.cursor()
+        p = "%s" if db_type == "mysql" else "?"
+        cursor.execute(
+            f"SELECT id, name, survey_number, phone_number, state, district, taluk, hobli, land_area_acres, land_area_guntas, primary_crop, soil_type FROM farmers WHERE LOWER(TRIM(name)) = LOWER({p}) OR (phone_number != '' AND phone_number = {p})",
+            (clean_name, clean_phone)
+        )
+        f_row = cursor.fetchone()
+        conn.close()
+
+        if f_row:
+            fid, f_name, f_survey, f_phone, f_state, f_district, f_taluk, f_hobli, f_acres, f_guntas, f_crop, f_soil = f_row
+            f_acres_val = float(f_acres or 3.0)
+            f_guntas_val = float(f_guntas or 0.0)
+            total_ac = max(f_acres_val + (f_guntas_val / 40.0), 0.5)
+
+            prim = f_crop or "Rice"
+            sec = "Banana" if prim != "Banana" else "Pepper"
+            soil_val = f_soil or DISTRICT_BASELINES.get(f_district, {}).get("soil_type", "Laterite Soil")
+
+            farmer_info = {
+                "id": f"FP-{fid}",
+                "name": f_name,
+                "acres": f_acres_val,
+                "guntas": f_guntas_val,
+                "primary_crop": prim,
+                "secondary_crop": sec,
+                "soil_type": soil_val,
+                "ph": "6.2",
+                "survey_number": f_survey or "108/A",
+                "hobli": f_hobli or "Kasaba",
+                "taluk": f_taluk or "Mangaluru",
+                "district": f_district or "Dakshina Kannada",
+                "state": f_state or "Karnataka",
+                "phone": f_phone or phone,
+                "data_source": "mysql",
+                "data_source_label": "Verified Farmer Profile (MySQL Workbench)"
+            }
+
+            # Check if mangaluru_farmer_details.csv has historical crop records for this farmer
+            if os.path.exists(FARMER_DETAILS_FILE):
+                try:
+                    crop_records = []
+                    with open(FARMER_DETAILS_FILE, mode='r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            r_name = row['Farmer_Name'].strip().lower()
+                            r_phone = row['Phone'].strip()
+                            if (clean_name and (r_name == clean_name or clean_name in r_name)) or (clean_phone and r_phone == clean_phone):
+                                crop_records.append(row)
+                                rev = float(row.get('Revenue_INR', 0) or 0)
+                                prof = float(row.get('Profit_INR', 0) or 0)
+                                cost = float(row.get('Input_Cost_INR', 0) or 0)
+                                if cost == 0 and rev > 0 and prof > 0:
+                                    cost = max(rev - prof, 0)
+                                ppa = float(row.get('Profit_Per_Acre_INR', 0) or 0)
+                                if ppa == 0 and prof > 0:
+                                    ppa = round(prof / max(f_acres_val, 0.1))
+
+                                history.append({
+                                    "year": int(row['Year']),
+                                    "yield": float(row['Yield_Quantity']),
+                                    "unit": row.get('Yield_Unit', 'kg'),
+                                    "profit": prof,
+                                    "revenue": rev,
+                                    "input_cost": cost,
+                                    "market_price": float(row.get('Market_Price_Per_Unit', 0) or 0),
+                                    "profit_per_acre": ppa
+                                })
+                    latest_record = max(crop_records, key=lambda row: int(row["Year"])) if crop_records else {}
+                    farmer_info["previous_crops"] = get_previous_crops(
+                        crop_records,
+                        [prim, latest_record.get("Primary_Crop"), latest_record.get("Secondary_Crop")]
+                    )
+                except Exception as ce:
+                    print(f"CSV history lookup note: {ce}")
+
+            # Generate realistic 5-year history calibrated to actual registered acres & crop if not in CSV
+            if not history:
+                base_yield = 24.0 if prim == "Rice" else (15.0 if prim == "Arecanut" else (180.0 if prim == "Banana" else 350.0))
+                base_price = 2400 if prim == "Rice" else (48000 if prim == "Arecanut" else (28 if prim == "Banana" else 145))
+                unit_label = "Quintals" if prim in ["Rice", "Arecanut"] else "kg"
+
+                for i, yr in enumerate([2021, 2022, 2023, 2024, 2025]):
+                    factor = 1.0 + (i * 0.04) + ((hash(f"{f_name}_{yr}") % 7 - 3) * 0.02)
+                    y_val = round(total_ac * base_yield * factor, 1)
+                    p_val = round(base_price * (1.0 + i * 0.05), 1)
+                    rev_val = round(y_val * p_val)
+                    cost_val = round(rev_val * 0.42)
+                    prof_val = rev_val - cost_val
+                    ppa_val = round(prof_val / total_ac)
                     history.append({
-                        "year": int(row['Year']),
-                        "yield": float(row['Yield_Quantity']),
-                        "unit": row['Yield_Unit'],
-                        "profit": float(row['Profit_INR']),
-                        "revenue": float(row['Revenue_INR'])
+                        "year": yr,
+                        "yield": y_val,
+                        "unit": unit_label,
+                        "profit": prof_val,
+                        "revenue": rev_val,
+                        "input_cost": cost_val,
+                        "market_price": p_val,
+                        "profit_per_acre": ppa_val
                     })
-    except Exception as e:
-        print(f"Error in farmer lookup: {e}")
-        
+    except Exception as dbe:
+        print(f"MySQL lookup error in farmer_lookup: {dbe}")
+
+    # 2. Secondary Check: CSV master dataset if not registered in MySQL
+    if not farmer_info and os.path.exists(FARMER_DETAILS_FILE):
+        try:
+            matched_records = []
+            with open(FARMER_DETAILS_FILE, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    r_name = row['Farmer_Name'].strip().lower()
+                    r_phone = row['Phone'].strip()
+                    matched = False
+                    if clean_name and (r_name == clean_name or clean_name in r_name):
+                        matched = True
+                    elif clean_phone and r_phone == clean_phone:
+                        matched = True
+
+                    if matched:
+                        matched_records.append(row)
+                        
+                        rev = float(row.get('Revenue_INR', 0) or 0)
+                        prof = float(row.get('Profit_INR', 0) or 0)
+                        cost = float(row.get('Input_Cost_INR', 0) or 0)
+                        if cost == 0 and rev > 0 and prof > 0:
+                            cost = max(rev - prof, 0)
+                        ppa = float(row.get('Profit_Per_Acre_INR', 0) or 0)
+                        if ppa == 0 and prof > 0:
+                            total_ac = float(row.get('Total_Land_Acres', 1) or 1)
+                            ppa = round(prof / max(total_ac, 0.1))
+
+                        history.append({
+                            "year": int(row['Year']),
+                            "yield": float(row['Yield_Quantity']),
+                            "unit": row.get('Yield_Unit', 'kg'),
+                            "profit": prof,
+                            "revenue": rev,
+                            "input_cost": cost,
+                            "market_price": float(row.get('Market_Price_Per_Unit', 0) or 0),
+                            "profit_per_acre": ppa
+                        })
+            if matched_records:
+                latest_record = max(matched_records, key=lambda row: int(row["Year"]))
+                farmer_info = {
+                    "id": latest_record['Farmer_ID'],
+                    "name": latest_record['Farmer_Name'],
+                    "acres": float(latest_record['Total_Land_Acres']),
+                    "guntas": float(latest_record['Total_Land_Guntas']),
+                    "primary_crop": latest_record['Primary_Crop'],
+                    "secondary_crop": latest_record.get('Secondary_Crop', 'Banana'),
+                    "soil_type": latest_record.get('Soil_Type', 'Laterite Soil'),
+                    "ph": latest_record.get('pH', '6.2'),
+                    "survey_number": latest_record.get('Survey_Number', '108/A'),
+                    "hobli": latest_record.get('Hobli', 'Mangaluru B'),
+                    "taluk": latest_record.get('Taluk', 'Mangaluru'),
+                    "district": latest_record.get('District', 'Dakshina Kannada'),
+                    "state": "Karnataka",
+                    "phone": latest_record.get('Phone', phone),
+                    "data_source": "csv",
+                    "data_source_label": "Verified Farmer (Mangaluru Taluk Records)",
+                    "previous_crops": get_previous_crops(
+                        matched_records,
+                        [latest_record['Primary_Crop'], latest_record.get('Secondary_Crop')]
+                    )
+                }
+        except Exception as e:
+            print(f"Error in farmer CSV lookup: {e}")
+
+    # 3. Final fallback for guest farmer names
+    if not farmer_info and clean_name:
+        f_name = name.strip()
+        farmer_info = {
+            "id": f"FP-{abs(hash(f_name)) % 9000 + 1000}",
+            "name": f_name,
+            "acres": 3.0,
+            "guntas": 0.0,
+            "primary_crop": "Rice",
+            "secondary_crop": "Banana",
+            "soil_type": "Laterite Soil",
+            "ph": "6.2",
+            "survey_number": "108/A",
+            "hobli": "Kasaba",
+            "taluk": "Mangaluru",
+            "district": "Dakshina Kannada",
+            "state": "Karnataka",
+            "phone": clean_phone or "9876543210"
+        }
+        for i, yr in enumerate([2021, 2022, 2023, 2024, 2025]):
+            factor = 1.0 + (i * 0.04) + ((hash(f"{f_name}_{yr}") % 7 - 3) * 0.02)
+            y_val = round(3.0 * 24.0 * factor, 1)
+            p_val = round(2400 * (1.0 + i * 0.05), 1)
+            rev_val = round(y_val * p_val)
+            cost_val = round(rev_val * 0.42)
+            prof_val = rev_val - cost_val
+            ppa_val = round(prof_val / 3.0)
+            history.append({
+                "year": yr,
+                "yield": y_val,
+                "unit": "Quintals",
+                "profit": prof_val,
+                "revenue": rev_val,
+                "input_cost": cost_val,
+                "market_price": p_val,
+                "profit_per_acre": ppa_val
+            })
+
     if farmer_info:
         return {
             "found": True,
