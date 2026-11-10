@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
+import { API_BASE_URL } from './config';
 import { LandingPage } from './components/Landing/LandingPage';
 import farmoraLogoMark from './assets/brand/agriveda-mark.png';
 import blackPepperIcon from './assets/black-pepper.png';
@@ -258,7 +259,7 @@ function App() {
             if (currentRain) params.append('rainfall', String(currentRain));
             if (currentSoil) params.append('soil_type', currentSoil);
 
-            const res = await fetch(`http://localhost:8000/crop-varieties/${encodeURIComponent(cropName)}?${params.toString()}`);
+            const res = await fetch(`${API_BASE_URL}/crop-varieties/${encodeURIComponent(cropName)}?${params.toString()}`);
             if (res.ok) {
                 const data: CropSpeciesData = await res.json();
                 setVarietyModalData(data);
@@ -289,7 +290,7 @@ function App() {
             if (currentRain) params.append('rainfall', String(currentRain));
             if (currentSoil) params.append('soil_type', currentSoil);
 
-            const res = await fetch(`http://localhost:8000/crop-varieties/${encodeURIComponent(cropName)}?${params.toString()}`);
+            const res = await fetch(`${API_BASE_URL}/crop-varieties/${encodeURIComponent(cropName)}?${params.toString()}`);
             if (res.ok) {
                 const data: CropSpeciesData = await res.json();
                 setSpeciesDataMap(prev => ({ ...prev, [cropName]: data }));
@@ -490,7 +491,7 @@ function App() {
             if (gpsCoords && location === (registeredUser?.taluk || '')) {
                 locQuery = `${gpsCoords.lat},${gpsCoords.lon}`;
             }
-            const res = await fetch(`http://localhost:8000/weather/${encodeURIComponent(locQuery)}`);
+            const res = await fetch(`${API_BASE_URL}/weather/${encodeURIComponent(locQuery)}`);
             if (res.ok) {
                 const data = await res.json();
                 setWeatherData(data);
@@ -507,7 +508,7 @@ function App() {
             const query = new URLSearchParams();
             if (talukName) query.append("taluk", talukName);
             if (districtName) query.append("district", districtName);
-            const res = await fetch(`http://localhost:8000/soil-data?${query.toString()}`);
+            const res = await fetch(`${API_BASE_URL}/soil-data?${query.toString()}`);
             if (res.ok) setSoilData(await res.json());
         } catch (e) {
             console.error("Soil data fetch failed", e);
@@ -516,7 +517,7 @@ function App() {
 
     const fetchMarketPrices = async () => {
         try {
-            const res = await fetch('http://localhost:8000/market-prices');
+            const res = await fetch(`${API_BASE_URL}/market-prices`);
             if (res.ok) setMarketPrices(await res.json());
         } catch (e) {
             console.error("Failed to fetch market prices", e);
@@ -527,8 +528,8 @@ function App() {
         setLoadingLiveMarket(true);
         try {
             const url = district
-                ? `http://localhost:8000/district-market-prices/${encodeURIComponent(district)}`
-                : 'http://localhost:8000/market-prices-live';
+                ? `${API_BASE_URL}/district-market-prices/${encodeURIComponent(district)}`
+                : `${API_BASE_URL}/market-prices-live`;
             const res = await fetch(url);
             if (res.ok) setLiveMarketData(await res.json());
         } catch (e) {
@@ -539,7 +540,7 @@ function App() {
     };
 
     const fetchCropHistory = async (token: string) => {
-        const response = await fetch('http://localhost:8000/farmer/crop-history', {
+        const response = await fetch(`${API_BASE_URL}/farmer/crop-history`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         if (!response.ok) {
@@ -554,7 +555,7 @@ function App() {
 
     const fetchFarmerHistory = async (name: string, phone: string) => {
         try {
-            const res = await fetch(`http://localhost:8000/farmer-lookup?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
+            const res = await fetch(`${API_BASE_URL}/farmer-lookup?name=${encodeURIComponent(name)}&phone=${encodeURIComponent(phone)}`);
             if (res.ok) {
                 const data = await res.json();
                 if (data.found) {
@@ -635,8 +636,8 @@ function App() {
             const isEditing = editingCropHistoryId !== null;
             const response = await fetch(
                 isEditing
-                    ? `http://localhost:8000/farmer/crop-history/${editingCropHistoryId}`
-                    : 'http://localhost:8000/farmer/crop-history',
+                    ? `${API_BASE_URL}/farmer/crop-history/${editingCropHistoryId}`
+                    : `${API_BASE_URL}/farmer/crop-history`,
                 {
                     method: isEditing ? 'PUT' : 'POST',
                     headers: {
@@ -666,7 +667,7 @@ function App() {
         if (!accessToken || !window.confirm(t('confirmDeleteCropHistory', lang))) return;
         setCropHistoryError('');
         try {
-            const response = await fetch(`http://localhost:8000/farmer/crop-history/${recordId}`, {
+            const response = await fetch(`${API_BASE_URL}/farmer/crop-history/${recordId}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
@@ -698,7 +699,7 @@ function App() {
                 params.set('lat', gpsCoords.lat.toString());
                 params.set('lon', gpsCoords.lon.toString());
             }
-            const res = await fetch(`http://localhost:8000/bhoomi/land-map?${params.toString()}`);
+            const res = await fetch(`${API_BASE_URL}/bhoomi/land-map?${params.toString()}`);
             if (res.ok) {
                 const data = await res.json();
                 setBhoomiMapData(data);
@@ -712,7 +713,7 @@ function App() {
 
     const fetchNeighbourData = async (userTaluk: string, hobli?: string, excludeName?: string, userCropOverride?: string) => {
         try {
-            let url = `http://localhost:8000/neighbour-planting/${encodeURIComponent(userTaluk)}`;
+            let url = `${API_BASE_URL}/neighbour-planting/${encodeURIComponent(userTaluk)}`;
             const params = new URLSearchParams();
             if (hobli) params.set('hobli', hobli);
             if (excludeName) params.set('exclude_name', excludeName);
@@ -756,7 +757,7 @@ function App() {
                 primary_crop: editPrimaryCrop,
                 soil_type: editSoilType
             };
-            const response = await fetch('http://localhost:8000/farmer/update', {
+            const response = await fetch(`${API_BASE_URL}/farmer/update`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -809,7 +810,7 @@ function App() {
                 land_area_acres: parseFloat(landAcres) || 0,
                 land_area_guntas: parseFloat(landGuntas) || 0
             };
-            const response = await fetch('http://localhost:8000/register', {
+            const response = await fetch(`${API_BASE_URL}/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -839,7 +840,7 @@ function App() {
         e.preventDefault();
         setLoadingLogin(true);
         try {
-            const response = await fetch('http://localhost:8000/login', {
+            const response = await fetch(`${API_BASE_URL}/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: loginName, password: loginPassword })
@@ -891,7 +892,7 @@ function App() {
 
     const handleLogout = () => {
         if (accessToken) {
-            fetch('http://localhost:8000/logout', {
+            fetch(`${API_BASE_URL}/logout`, {
                 method: 'POST',
                 headers: { Authorization: `Bearer ${accessToken}` }
             }).catch(error => console.error('Logout request failed', error));
@@ -919,7 +920,7 @@ function App() {
             const humidity = weatherData?.humidity || 85;
 
             const res = await fetch(
-                `http://localhost:8000/recommendations/${encodeURIComponent(userTaluk)}?ph=${ph}&temp=${temp}&rainfall=${rainfall}&humidity=${humidity}`
+                `${API_BASE_URL}/recommendations/${encodeURIComponent(userTaluk)}?ph=${ph}&temp=${temp}&rainfall=${rainfall}&humidity=${humidity}`
             );
             if (res.ok) {
                 const data = await res.json();
@@ -941,7 +942,7 @@ function App() {
         setLoadingMarket(true);
         setShowMarketResult(false);
         try {
-            const res = await fetch('http://localhost:8000/market-prices');
+            const res = await fetch(`${API_BASE_URL}/market-prices`);
             if (res.ok) {
                 const prices: CropPrice[] = await res.json();
                 setMarketPrices(prices);
@@ -975,7 +976,7 @@ function App() {
                 survey_number: surveyVal,
                 ...(selectedVariety ? { variety: selectedVariety } : {})
             });
-            const res = await fetch(`http://localhost:8000/profit-estimate?${params}`);
+            const res = await fetch(`${API_BASE_URL}/profit-estimate?${params}`);
             if (res.ok) {
                 setProfitEstimate(await res.json());
                 setShowProfitCalc(true);
