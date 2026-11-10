@@ -13,7 +13,7 @@
   <img src="https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.11-009688?style=flat-square" alt="Backend" />
   <img src="https://img.shields.io/badge/Animations-Framer%20Motion-ff69b4?style=flat-square" alt="Framer Motion" />
   <img src="https://img.shields.io/badge/Styling-Custom%20Glassmorphism%20CSS-10b981?style=flat-square" alt="CSS" />
-  <img src="https://img.shields.io/badge/Deployment-Vercel%20Ready-black?style=flat-square" alt="Vercel" />
+  <a href="https://farmora-the-next-era-of-precision-a.vercel.app/" target="_blank"><img src="https://img.shields.io/badge/Live%20Demo-Vercel-black?style=flat-square&logo=vercel" alt="Live Demo" /></a>
 </p>
 
 ---
@@ -152,16 +152,15 @@ Farmora/
 
 ---
 
-## 🌐 Deploy to Vercel
+## 🌐 Live Deployment
 
-The frontend is ready for 1-click deployment on Vercel:
+Farmora is deployed and live on Vercel:
 
-1. Push your code to your GitHub repository.
-2. Import the repository in [Vercel](https://vercel.com/new).
-3. Set **Root Directory** to `frontend`.
-4. Add environment variable (optional for live backend):
-   * `VITE_API_URL` = `https://your-backend-api.com`
-5. Click **Deploy**.
+🔗 **[https://farmora-the-next-era-of-precision-a.vercel.app/](https://farmora-the-next-era-of-precision-a.vercel.app/)**
+
+* **Hosting:** Vercel (CI/CD linked directly to the `main` branch)
+* **Framework:** React 19 + TypeScript + Vite
+* **Live Features:** Animated landing experience, interactive previews, capability strip, and bilingual English / Kannada interface.
 
 ---
 
