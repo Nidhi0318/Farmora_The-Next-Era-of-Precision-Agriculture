@@ -467,9 +467,10 @@ body {
 
 .crop-image-icon {
   display: inline-block;
-  width: 1em;
-  height: 1em;
-  object-fit: contain;
+  width: 1.15em;
+  height: 1.15em;
+  object-fit: cover;
+  border-radius: 4px;
   vertical-align: middle;
 }
 

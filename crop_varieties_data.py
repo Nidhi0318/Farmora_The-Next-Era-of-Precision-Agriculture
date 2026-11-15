@@ -1777,7 +1777,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Malabar",
@@ -1809,7 +1809,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Vazhukka",
@@ -1841,7 +1841,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "ICRI-3 (Avinash)",
@@ -1873,7 +1873,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Mudigere-1",
@@ -1905,7 +1905,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Njallani",
@@ -1937,7 +1937,7 @@ CROP_SPECIES = {
                     "Hassan",
                     "Uttara Kannada (Sirsi)"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1638613064543-cc89ba9e9b21?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -2197,7 +2197,7 @@ CROP_SPECIES = {
                     "Kalaburagi",
                     "Raichur"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1635146037526-a2d72b3f3059?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "CSH-16",
@@ -2231,7 +2231,7 @@ CROP_SPECIES = {
                     "Kalaburagi",
                     "Raichur"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1635146037526-a2d72b3f3059?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "SPV-462",
@@ -2265,7 +2265,7 @@ CROP_SPECIES = {
                     "Kalaburagi",
                     "Raichur"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1635146037526-a2d72b3f3059?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "DSV-4 (Bijapur Local)",
@@ -2299,7 +2299,7 @@ CROP_SPECIES = {
                     "Kalaburagi",
                     "Raichur"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1635146037526-a2d72b3f3059?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "CSV-15",
@@ -2333,7 +2333,7 @@ CROP_SPECIES = {
                     "Kalaburagi",
                     "Raichur"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1635146037526-a2d72b3f3059?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1595855759920-86582396756a?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -2408,7 +2408,7 @@ CROP_SPECIES = {
                     "Raichur",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1591022278884-60c838abf4e2?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1606041008023-472dfb5e530f?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Suraj (Bt Hybrid)",
@@ -2476,7 +2476,7 @@ CROP_SPECIES = {
                     "Raichur",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1591022278884-60c838abf4e2?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1606041008023-472dfb5e530f?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "NHH-44",
@@ -2585,7 +2585,7 @@ CROP_SPECIES = {
                     "Chitradurga",
                     "Bellary"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601593346740-854b3ac0af0a?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "NK 6240",
@@ -2653,7 +2653,7 @@ CROP_SPECIES = {
                     "Chitradurga",
                     "Bellary"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601593346740-854b3ac0af0a?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Baby Corn (G-5414)",
@@ -2687,7 +2687,7 @@ CROP_SPECIES = {
                     "Chitradurga",
                     "Bellary"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1559181567-c3190878897a?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1551754655-cd27e38d2076?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -2914,7 +2914,7 @@ CROP_SPECIES = {
                     "Yadgir",
                     "Tumakuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601386636393-8c1c56b18ed5?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "TS-3R",
@@ -2947,7 +2947,7 @@ CROP_SPECIES = {
                     "Yadgir",
                     "Tumakuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601386636393-8c1c56b18ed5?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "GRG-811",
@@ -2980,7 +2980,7 @@ CROP_SPECIES = {
                     "Yadgir",
                     "Tumakuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601386636393-8c1c56b18ed5?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "BRG-2",
@@ -3013,7 +3013,7 @@ CROP_SPECIES = {
                     "Yadgir",
                     "Tumakuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601386636393-8c1c56b18ed5?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "ICPL 87119 (Asha)",
@@ -3046,7 +3046,7 @@ CROP_SPECIES = {
                     "Yadgir",
                     "Tumakuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1601386636393-8c1c56b18ed5?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -3155,7 +3155,7 @@ CROP_SPECIES = {
                     "Punjab",
                     "Haryana"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1469594292131-c5b2afee2971?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "GW-366",
@@ -3223,7 +3223,7 @@ CROP_SPECIES = {
                     "Punjab",
                     "Haryana"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1469594292131-c5b2afee2971?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -3448,7 +3448,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "MR-1",
@@ -3482,7 +3482,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "GPU-67",
@@ -3516,7 +3516,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "ML-365",
@@ -3550,7 +3550,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "KMR-204",
@@ -3584,7 +3584,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Indaf-5",
@@ -3618,7 +3618,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Kolar"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1600956049714-0e7a2e0fe4d1?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -3835,7 +3835,7 @@ CROP_SPECIES = {
                     "Davanagere",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1558640476-ee29f8cc0f59?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "CoC-671",
@@ -3868,7 +3868,7 @@ CROP_SPECIES = {
                     "Davanagere",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1558640476-ee29f8cc0f59?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Co-0238",
@@ -3901,7 +3901,7 @@ CROP_SPECIES = {
                     "Davanagere",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1558640476-ee29f8cc0f59?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Co-62175",
@@ -3934,7 +3934,7 @@ CROP_SPECIES = {
                     "Davanagere",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1558640476-ee29f8cc0f59?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "SNK-44 (Early)",
@@ -3967,7 +3967,7 @@ CROP_SPECIES = {
                     "Davanagere",
                     "Mysuru"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1558640476-ee29f8cc0f59?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
@@ -4311,7 +4311,7 @@ CROP_SPECIES = {
                     "Ramanagara",
                     "Belagavi"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1504871078153-bc6dccf0c1ad?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1553279768-865429fa0078?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Malgova",
@@ -4733,7 +4733,7 @@ CROP_SPECIES = {
     "Turmeric": {
         "unit": "quintal",
         "botanical_genus": "Curcuma longa",
-        "crop_image": "https://images.unsplash.com/photo-1615485290196-8566a7b73cbb?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "Salem Local",
@@ -4766,7 +4766,7 @@ CROP_SPECIES = {
                     "Shivamogga",
                     "Uttara Kannada"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1615485500704-8e3b5614a0de?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "IISR Pratibha",
@@ -4832,7 +4832,7 @@ CROP_SPECIES = {
                     "Shivamogga",
                     "Uttara Kannada"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1615485500704-8e3b5614a0de?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Erode Local",
@@ -5001,7 +5001,7 @@ CROP_SPECIES = {
                     "Raichur",
                     "Gadag"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1592894689823-1b3f8b2cf15e?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1588252303782-cb80119abd6d?auto=format&fit=crop&w=800&q=80"
             }
         ]
     }

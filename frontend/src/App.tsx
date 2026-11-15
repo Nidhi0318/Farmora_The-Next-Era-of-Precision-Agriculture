@@ -1015,13 +1015,62 @@ function App() {
         'Turmeric': '🌿', 'Chilli': '🌶️'
     };
 
+    const CROP_FALLBACK_IMAGES: Record<string, string> = {
+        'Rice': '/crops/rice.jpg',
+        'Banana': '/crops/banana.jpg',
+        'Arecanut': '/crops/arecanut.jpg',
+        'Pepper': '/crops/pepper.jpg',
+        'Cashew': '/crops/cashew.jpg',
+        'Rubber': '/crops/rubber.jpg',
+        'Coconut': '/crops/coconut.jpg',
+        'Coffee': '/crops/coffee.jpg',
+        'Cardamom': '/crops/cardamom.jpg',
+        'Ginger': '/crops/ginger.jpg',
+        'Jowar': '/crops/jowar.jpg',
+        'Cotton': '/crops/cotton.jpg',
+        'Maize': '/crops/maize.jpg',
+        'Bengal Gram': '/crops/bengal-gram.jpg',
+        'Red Gram': '/crops/red-gram.jpg',
+        'Wheat': '/crops/wheat.jpg',
+        'Pomegranate': '/crops/pomegranate.jpg',
+        'Ragi': '/crops/ragi.jpg',
+        'Groundnut': '/crops/groundnut.jpg',
+        'Sugarcane': '/crops/sugarcane.jpg',
+        'Tomato': '/crops/tomato.jpg',
+        'Mango': '/crops/mango.jpg',
+        'Onion': '/crops/onion.jpg',
+        'Potato': '/crops/potato.jpg',
+        'Turmeric': '/crops/turmeric.jpg',
+        'Chilli': '/crops/chilli.jpg'
+    };
+
     const cropIcons: Record<string, string> = {
         Pepper: blackPepperIcon,
         Cashew: cashewIcon,
         Cotton: cottonIcon,
         Pomegranate: pomegranateIcon,
         Rice: paddyIcon,
-        Wheat: wheatIcon
+        Wheat: wheatIcon,
+        Ragi: '/crops/ragi.jpg',
+        Maize: '/crops/maize.jpg',
+        Banana: '/crops/banana.jpg',
+        Coconut: '/crops/coconut.jpg',
+        Coffee: '/crops/coffee.jpg',
+        Arecanut: '/crops/arecanut.jpg',
+        Rubber: '/crops/rubber.jpg',
+        Cardamom: '/crops/cardamom.jpg',
+        Ginger: '/crops/ginger.jpg',
+        Jowar: '/crops/jowar.jpg',
+        'Bengal Gram': '/crops/bengal-gram.jpg',
+        'Red Gram': '/crops/red-gram.jpg',
+        Groundnut: '/crops/groundnut.jpg',
+        Sugarcane: '/crops/sugarcane.jpg',
+        Tomato: '/crops/tomato.jpg',
+        Mango: '/crops/mango.jpg',
+        Onion: '/crops/onion.jpg',
+        Potato: '/crops/potato.jpg',
+        Turmeric: '/crops/turmeric.jpg',
+        Chilli: '/crops/chilli.jpg'
     };
 
     const getCropIcon = (crop: string, fallback: string): React.ReactNode =>
@@ -3102,16 +3151,21 @@ function App() {
                                                                     <span>{getCropIcon(varietyModalData?.crop || varietyModalCrop || '', '🌱')}</span>
                                                                     <strong>{getCropName(varietyModalData?.crop || varietyModalCrop || '', lang)}</strong>
                                                                 </div>
-                                                                {varietyModalData?.crop_image && (
-                                                                    <img
-                                                                        src={v.image_url || varietyModalData.crop_image}
-                                                                        alt={`${getCropName(varietyModalData.crop, lang)} - ${v.name}`}
-                                                                        className="modal-var-img"
-                                                                        onError={(event) => {
+                                                                <img
+                                                                    src={v.image_url || varietyModalData?.crop_image || CROP_FALLBACK_IMAGES[varietyModalCrop || ''] || CROP_FALLBACK_IMAGES[varietyModalData?.crop || ''] || '/crops/ragi.jpg'}
+                                                                    alt={`${getCropName(varietyModalData?.crop || varietyModalCrop || '', lang)} - ${v.name}`}
+                                                                    className="modal-var-img"
+                                                                    loading="lazy"
+                                                                    onError={(event) => {
+                                                                        const cropKey = varietyModalCrop || varietyModalData?.crop || '';
+                                                                        const fallback = CROP_FALLBACK_IMAGES[cropKey];
+                                                                        if (fallback && !event.currentTarget.src.endsWith(fallback)) {
+                                                                            event.currentTarget.src = fallback;
+                                                                        } else {
                                                                             event.currentTarget.style.display = 'none';
-                                                                        }}
-                                                                    />
-                                                                )}
+                                                                        }
+                                                                    }}
+                                                                />
                                                                 {v.image_credit && v.image_source && (
                                                                     <a
                                                                         className="variety-image-credit"
