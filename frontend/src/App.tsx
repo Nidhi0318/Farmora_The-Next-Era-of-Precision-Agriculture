@@ -1004,15 +1004,33 @@ function App() {
     };
 
     const cropEmojis: Record<string, string> = {
-        'Banana': '🍌', 'Arecanut': '🌴', 'Sunflower': '🌻',
+        'Rice': '🌾',
+        'Banana': '🍌',
+        'Arecanut': '🌴',
+        'Sunflower': '🌻',
         'Rubber': '🌳',
-        'Coconut': '🥥', 'Sugarcane': '🎋',
-        'Cotton': '🌱', 'Coffee': '☕', 'Cardamom': '🌱',
-        'Ginger': '🫚', 'Jowar': '🌾', 'Maize': '🌽',
-        'Bengal Gram': '🫘', 'Red Gram': '🫘', 'Pomegranate': '🍎',
-        'Ragi': '🌾', 'Groundnut': '🥜', 'Tomato': '🍅',
-        'Mango': '🥭', 'Onion': '🧅', 'Potato': '🥔',
-        'Turmeric': '🌿', 'Chilli': '🌶️'
+        'Coconut': '🥥',
+        'Sugarcane': '🎋',
+        'Cotton': '🌱',
+        'Coffee': '☕',
+        'Cardamom': '🌿',
+        'Ginger': '🫚',
+        'Jowar': '🌾',
+        'Maize': '🌽',
+        'Bengal Gram': '🫘',
+        'Red Gram': '🫘',
+        'Wheat': '🌾',
+        'Pomegranate': '🍎',
+        'Ragi': '🌾',
+        'Groundnut': '🥜',
+        'Tomato': '🍅',
+        'Mango': '🥭',
+        'Onion': '🧅',
+        'Potato': '🥔',
+        'Turmeric': '🌿',
+        'Chilli': '🌶️',
+        'Pepper': '🌶️',
+        'Cashew': '🥜'
     };
 
     const CROP_FALLBACK_IMAGES: Record<string, string> = {
@@ -1050,26 +1068,7 @@ function App() {
         Cotton: cottonIcon,
         Pomegranate: pomegranateIcon,
         Rice: paddyIcon,
-        Wheat: wheatIcon,
-        Ragi: '/crops/ragi.jpg',
-        Maize: '/crops/maize.jpg',
-        Banana: '/crops/banana.jpg',
-        Coconut: '/crops/coconut.jpg',
-        Coffee: '/crops/coffee.jpg',
-        Rubber: '/crops/rubber.jpg',
-        Cardamom: '/crops/cardamom.jpg',
-        Ginger: '/crops/ginger.jpg',
-        Jowar: '/crops/jowar.jpg',
-        'Bengal Gram': '/crops/bengal-gram.jpg',
-        'Red Gram': '/crops/red-gram.jpg',
-        Groundnut: '/crops/groundnut.jpg',
-        Sugarcane: '/crops/sugarcane.jpg',
-        Tomato: '/crops/tomato.jpg',
-        Mango: '/crops/mango.jpg',
-        Onion: '/crops/onion.jpg',
-        Potato: '/crops/potato.jpg',
-        Turmeric: '/crops/turmeric.jpg',
-        Chilli: '/crops/chilli.jpg'
+        Wheat: wheatIcon
     };
 
     const getCropIcon = (crop: string, fallback: string): React.ReactNode =>

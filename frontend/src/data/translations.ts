@@ -14,7 +14,7 @@ export const cropTranslations: Record<string, { en: string; kn: string; emoji: s
     'Sugarcane': { en: 'Sugarcane', kn: 'ಕಬ್ಬು', emoji: '🎋' },
     'Cotton': { en: 'Cotton', kn: 'ಹತ್ತಿ', emoji: '🌱' },
     'Coffee': { en: 'Coffee', kn: 'ಕಾಫಿ', emoji: '☕' },
-    'Cardamom': { en: 'Cardamom', kn: 'ಏಲಕ್ಕಿ', emoji: '🌱' },
+    'Cardamom': { en: 'Cardamom', kn: 'ಏಲಕ್ಕಿ', emoji: '🌿' },
     'Ginger': { en: 'Ginger', kn: 'ಶುಂಠಿ', emoji: '🫚' },
     'Jowar': { en: 'Jowar (Sorghum)', kn: 'ಜೋಳ', emoji: '🌾' },
     'Maize': { en: 'Maize (Corn)', kn: 'ಮೆಕ್ಕೆಜೋಳ', emoji: '🌽' },

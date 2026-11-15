@@ -1323,7 +1323,7 @@ CROP_SPECIES = {
     "Coconut": {
         "unit": "piece",
         "botanical_genus": "Cocos nucifera",
-        "crop_image": "https://images.unsplash.com/photo-1544376798-89aa6b82c6cd?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1598030304671-5aa1d6f21128?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "West Coast Tall",
@@ -1546,7 +1546,7 @@ CROP_SPECIES = {
     "Coffee": {
         "unit": "kg",
         "botanical_genus": "Coffea",
-        "crop_image": "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1587734195503-904fca47e0e9?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "Arabica (S.795)",
@@ -1944,9 +1944,9 @@ CROP_SPECIES = {
     "Ginger": {
         "unit": "kg",
         "botanical_genus": "Zingiber officinale",
-        "crop_image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e3/Ginger_plants_with_the_stem.jpg/960px-Ginger_plants_with_the_stem.jpg",
-        "crop_image_credit": "Representative ginger plant photo · Bukky658 · CC BY-SA 4.0",
-        "crop_image_source": "https://commons.wikimedia.org/wiki/File:Ginger_plants_with_the_stem.jpg",
+        "crop_image": "https://images.unsplash.com/photo-1615485500704-8e990f9900f7?auto=format&fit=crop&w=800&q=80",
+        "crop_image_credit": "Representative ginger root photo · Unsplash",
+        "crop_image_source": "https://unsplash.com",
         "varieties": [
             {
                 "name": "Maran",
@@ -2163,7 +2163,7 @@ CROP_SPECIES = {
     "Jowar": {
         "unit": "quintal",
         "botanical_genus": "Sorghum bicolor",
-        "crop_image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "M 35-1 (Maldandi)",
@@ -2694,7 +2694,7 @@ CROP_SPECIES = {
     "Bengal Gram": {
         "unit": "quintal",
         "botanical_genus": "Cicer arietinum",
-        "crop_image": "https://images.unsplash.com/photo-1515543237350-b3eea1ec8082?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1547496502-affa22d38842?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "JG-11",
@@ -2881,7 +2881,7 @@ CROP_SPECIES = {
     "Red Gram": {
         "unit": "quintal",
         "botanical_genus": "Cajanus cajan",
-        "crop_image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1596797038530-2c107229654b?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "BRG-1 (Maruti)",
@@ -3414,7 +3414,7 @@ CROP_SPECIES = {
     "Ragi": {
         "unit": "quintal",
         "botanical_genus": "Eleusine coracana",
-        "crop_image": "https://images.unsplash.com/photo-1509358271058-acd22cc93898?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "GPU-28",
@@ -3802,7 +3802,7 @@ CROP_SPECIES = {
     "Sugarcane": {
         "unit": "quintal",
         "botanical_genus": "Saccharum officinarum",
-        "crop_image": "https://images.unsplash.com/photo-1589923188900-85dae523342b?auto=format&fit=crop&w=700&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1597916829826-02e5bb4a54e0?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "Co-86032",
@@ -4733,7 +4733,7 @@ CROP_SPECIES = {
     "Turmeric": {
         "unit": "quintal",
         "botanical_genus": "Curcuma longa",
-        "crop_image": "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?auto=format&fit=crop&w=800&q=80",
+        "crop_image": "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "Salem Local",
