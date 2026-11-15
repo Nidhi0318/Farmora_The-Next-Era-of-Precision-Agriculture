@@ -4693,7 +4693,7 @@ CROP_SPECIES = {
                     "Kolar",
                     "Bengaluru Rural"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=800&q=80"
             },
             {
                 "name": "Kufri Chipsona-1",
@@ -4726,7 +4726,7 @@ CROP_SPECIES = {
                     "Kolar",
                     "Bengaluru Rural"
                 ],
-                "image_url": "https://images.unsplash.com/photo-1518977676601-b53f82aba655?auto=format&fit=crop&w=600&q=80"
+                "image_url": "https://images.unsplash.com/photo-1582515073490-39981397c445?auto=format&fit=crop&w=800&q=80"
             }
         ]
     },
