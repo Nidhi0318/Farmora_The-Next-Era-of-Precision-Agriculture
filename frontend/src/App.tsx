@@ -1054,24 +1054,11 @@ function App() {
         return (
             <div className="registration-container">
                 <header className="reg-header">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', width: '100%', maxWidth: '420px', margin: '0 auto 0.75rem' }}>
+                    <div className="reg-top-bar">
                         <button
                             type="button"
                             className="back-to-landing-btn"
                             onClick={() => setShowLanding(true)}
-                            style={{
-                                background: 'rgba(255, 255, 255, 0.9)',
-                                border: '1px solid #c7d2fe',
-                                borderRadius: '8px',
-                                padding: '0.35rem 0.75rem',
-                                color: '#1b4332',
-                                cursor: 'pointer',
-                                fontSize: '0.85rem',
-                                fontWeight: 600,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.35rem'
-                            }}
                         >
                             ← {lang === 'kn' ? 'ಮುಖಪುಟ' : 'Back to Home'}
                         </button>
