@@ -1056,7 +1056,6 @@ function App() {
         Banana: '/crops/banana.jpg',
         Coconut: '/crops/coconut.jpg',
         Coffee: '/crops/coffee.jpg',
-        Arecanut: '/crops/arecanut.jpg',
         Rubber: '/crops/rubber.jpg',
         Cardamom: '/crops/cardamom.jpg',
         Ginger: '/crops/ginger.jpg',

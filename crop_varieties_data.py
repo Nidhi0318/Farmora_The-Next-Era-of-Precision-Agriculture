@@ -524,7 +524,7 @@ CROP_SPECIES = {
     "Arecanut": {
         "unit": "quintal",
         "botanical_genus": "Areca catechu",
-        "crop_image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cc/Areca_Palm_Seeds_Forming_Coorg_Feb24_A7C_09499.jpg/500px-Areca_Palm_Seeds_Forming_Coorg_Feb24_A7C_09499.jpg",
+        "crop_image": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
         "varieties": [
             {
                 "name": "Mangala",
@@ -659,9 +659,9 @@ CROP_SPECIES = {
                     "Udupi",
                     "Mangaluru"
                 ],
-                "image_url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/06/Arecanut_plantation.jpg/960px-Arecanut_plantation.jpg",
-                "image_credit": "Representative photo · Irrigator · CC BY-SA",
-                "image_source": "https://commons.wikimedia.org/wiki/File:Arecanut_plantation.jpg"
+                "image_url": "https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80",
+                "image_credit": "Representative photo · Unsplash",
+                "image_source": "https://unsplash.com"
             },
             {
                 "name": "Mohitnagar",
@@ -728,9 +728,9 @@ CROP_SPECIES = {
                     "Chikkamagaluru",
                     "Thirthahalli"
                 ],
-                "image_url": "https://upload.wikimedia.org/wikipedia/commons/5/58/10._Arecanut_Palm_at_the_Plantation.jpg",
-                "image_credit": "Representative photo · Vmjmalali · CC BY-SA",
-                "image_source": "https://commons.wikimedia.org/wiki/File:10._Arecanut_Palm_at_the_Plantation.jpg"
+                "image_url": "https://images.unsplash.com/photo-1596547609652-9cf5d8d76921?auto=format&fit=crop&w=800&q=80",
+                "image_credit": "Representative photo · Unsplash",
+                "image_source": "https://unsplash.com"
             }
         ]
     },
