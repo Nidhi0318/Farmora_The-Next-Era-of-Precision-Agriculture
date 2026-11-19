@@ -161,7 +161,7 @@ Farmora is deployed and live on Vercel:
 * **Hosting:** Vercel (CI/CD linked directly to the `main` branch)
 * **Framework:** React 19 + TypeScript + Vite
 * **Live Features:** Animated landing experience, interactive previews, capability strip, and bilingual English / Kannada interface.
-
+**https://farmora-agri.vercel.app/**
 ---
 
 ## 🛡️ License
